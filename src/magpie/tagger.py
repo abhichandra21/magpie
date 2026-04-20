@@ -13,7 +13,7 @@ from PIL import Image
 
 MAX_LONG_EDGE_PX = 1568
 JPEG_QUALITY = 85
-DEFAULT_TIMEOUT_S = 120.0
+DEFAULT_TIMEOUT_S = 300.0
 
 
 @dataclass(frozen=True)
