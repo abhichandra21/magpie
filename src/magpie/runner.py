@@ -172,9 +172,11 @@ def _iter_images(paths: Iterable[Path]) -> list[Path]:
 
 
 def _write_csv(path: Path, rows: list[_Row]) -> None:
-    with path.open("w", newline="") as fh:
+    write_header = not path.exists() or path.stat().st_size == 0
+    with path.open("a", newline="") as fh:
         writer = csv.DictWriter(fh, fieldnames=BatchRunner.CSV_FIELDS)
-        writer.writeheader()
+        if write_header:
+            writer.writeheader()
         for r in rows:
             writer.writerow(
                 {
