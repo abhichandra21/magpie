@@ -108,7 +108,11 @@ def watch(
             )
 
             async def process(path: Path) -> None:
-                await runner.run([path])
+                summary = await runner.run([path])
+                # Raise so the watcher's exponential-backoff loop retries
+                # transient endpoint or exiftool failures.
+                if summary.failed:
+                    raise RuntimeError(f"tagging failed for {path}")
 
             watcher = Watcher(paths=paths, process=process)
             await watcher.start()

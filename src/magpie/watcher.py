@@ -35,22 +35,30 @@ class _EventBridge(FileSystemEventHandler):
         self._loop = loop
         self._queue = queue
 
-    def _maybe_enqueue(self, event: FileSystemEvent) -> None:
-        if event.is_directory:
+    def _enqueue_path(self, raw_path: str | None) -> None:
+        if not raw_path:
             return
-        path = Path(event.src_path)
+        path = Path(raw_path)
         if path.suffix.lower() not in IMAGE_EXTS:
             return
         self._loop.call_soon_threadsafe(self._queue.put_nowait, path)
 
     def on_created(self, event: FileSystemEvent) -> None:
-        self._maybe_enqueue(event)
+        if event.is_directory:
+            return
+        self._enqueue_path(event.src_path)
 
     def on_modified(self, event: FileSystemEvent) -> None:
-        self._maybe_enqueue(event)
+        if event.is_directory:
+            return
+        self._enqueue_path(event.src_path)
 
     def on_moved(self, event: FileSystemEvent) -> None:
-        self._maybe_enqueue(event)
+        if event.is_directory:
+            return
+        # Atomic-import workflows rename a temp file into the watched dir;
+        # the destination is the finished image we care about.
+        self._enqueue_path(getattr(event, "dest_path", None) or event.src_path)
 
 
 class Watcher:

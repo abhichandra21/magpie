@@ -9,11 +9,18 @@ import re
 from dataclasses import dataclass, field
 
 import httpx
-from PIL import Image
+from PIL import Image, ImageOps
+
+try:
+    import pillow_heif
+
+    pillow_heif.register_heif_opener()
+except ImportError:
+    pass
 
 MAX_LONG_EDGE_PX = 1568
 JPEG_QUALITY = 85
-DEFAULT_TIMEOUT_S = 120.0
+DEFAULT_TIMEOUT_S = 300.0
 
 
 @dataclass(frozen=True)
@@ -126,7 +133,9 @@ class Tagger:
 
 def _image_to_data_url(image_bytes: bytes) -> str:
     with Image.open(io.BytesIO(image_bytes)) as img:
-        img = img.convert("RGB") if img.mode not in ("RGB", "L") else img
+        img = ImageOps.exif_transpose(img)
+        if img.mode not in ("RGB", "L"):
+            img = img.convert("RGB")
         w, h = img.size
         long_edge = max(w, h)
         if long_edge > MAX_LONG_EDGE_PX:
