@@ -14,10 +14,13 @@ from datetime import datetime
 from pathlib import Path
 
 import exiftool
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import Body, FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from PIL import Image, ImageOps
+
+from magpie.config import Config, ConfigError
+from magpie.webui.jobs import MANAGER
 
 try:
     import pillow_heif
@@ -100,9 +103,82 @@ def _all_known_paths(runs_dir: Path) -> set[str]:
     return seen
 
 
+def _load_config() -> Config:
+    try:
+        return Config.load()
+    except ConfigError as exc:
+        raise HTTPException(status_code=500, detail=f"config: {exc}") from exc
+
+
+def _job_to_dict(job) -> dict:
+    return {
+        "id": job.id,
+        "path": job.path,
+        "endpoint": job.endpoint,
+        "model": job.model,
+        "hint": job.hint,
+        "force": job.force,
+        "status": job.status,
+        "started": job.started,
+        "finished": job.finished,
+        "total": job.total,
+        "tagged": job.tagged,
+        "skipped": job.skipped,
+        "failed": job.failed,
+        "current": job.current,
+        "error": job.error,
+        "csv_path": job.csv_path,
+        "events": [
+            {"kind": e.kind, "ts": e.ts, "data": e.data} for e in list(job.events)
+        ],
+    }
+
+
 def build_app(runs_dir: Path | None = None) -> FastAPI:
     runs_dir = runs_dir or _runs_dir()
     app = FastAPI(title="magpie webui", openapi_url=None, docs_url=None, redoc_url=None)
+
+    @app.get("/api/endpoints")
+    def endpoints() -> JSONResponse:
+        cfg = _load_config()
+        return JSONResponse(
+            {
+                "default": cfg.default_endpoint,
+                "endpoints": [
+                    {"name": n, "model": e.model, "url": e.url}
+                    for n, e in sorted(cfg.endpoints.items())
+                ],
+            }
+        )
+
+    @app.post("/api/jobs")
+    def start_job(payload: dict = Body(default_factory=dict)) -> JSONResponse:  # noqa: B008
+        path = (payload or {}).get("path", "").strip()
+        endpoint = (payload or {}).get("endpoint") or None
+        hint = (payload or {}).get("hint", "") or ""
+        force = bool((payload or {}).get("force", False))
+        if not path:
+            raise HTTPException(status_code=400, detail="path is required")
+        src = Path(path).expanduser()
+        if not src.exists():
+            raise HTTPException(status_code=400, detail=f"path not found: {src}")
+        cfg = _load_config()
+        try:
+            job = MANAGER.submit(cfg, str(src), endpoint, hint, force)
+        except ConfigError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return JSONResponse({"id": job.id}, status_code=202)
+
+    @app.get("/api/jobs")
+    def list_jobs() -> JSONResponse:
+        return JSONResponse([_job_to_dict(j) for j in MANAGER.list()])
+
+    @app.get("/api/jobs/{job_id}")
+    def job_detail(job_id: str) -> JSONResponse:
+        job = MANAGER.get(job_id)
+        if not job:
+            raise HTTPException(status_code=404, detail="job not found")
+        return JSONResponse(_job_to_dict(job))
 
     # Path allow-list is re-derived on each request so newly tagged files are
     # reachable without a server restart. Cheap even for thousands of rows.

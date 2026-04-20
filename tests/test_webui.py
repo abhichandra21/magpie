@@ -158,6 +158,17 @@ def test_thumb_serves_listed_path(runs_dir, client, photo):
     assert max(out.size) <= 900
 
 
+def test_start_job_rejects_missing_path(client):
+    r = client.post("/api/jobs", json={"path": "/does/not/exist/ever.jpg"})
+    assert r.status_code == 400
+    assert "not found" in r.json()["detail"]
+
+
+def test_start_job_requires_path(client):
+    r = client.post("/api/jobs", json={})
+    assert r.status_code == 400
+
+
 def test_thumb_404_when_file_missing(runs_dir, client, tmp_path):
     # CSV references a path that doesn't exist on disk
     ghost = tmp_path / "ghost.jpg"

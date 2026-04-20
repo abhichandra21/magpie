@@ -3,10 +3,10 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>magpie · a cabinet of captioned things</title>
+  <title>magpie</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght,SOFT@0,9..144,300..900,0..100;1,9..144,300..900,0..100&family=Instrument+Serif:ital@0;1&family=Fragment+Mono:ital@0;1&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..900;1,9..144,300..900&family=Instrument+Serif:ital@0;1&family=Fragment+Mono:ital@0;1&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/style.css">
   <link rel="icon" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><circle cx='8' cy='8' r='7' fill='%230c0d09'/><circle cx='8' cy='8' r='2.5' fill='%2300e6c3'/></svg>">
 </head>
@@ -14,13 +14,13 @@
   <svg class="grain" aria-hidden="true">
     <filter id="noise">
       <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" stitchTiles="stitch"/>
-      <feColorMatrix values="0 0 0 0 0.95  0 0 0 0 0.9  0 0 0 0 0.75  0 0 0 0.07 0"/>
+      <feColorMatrix values="0 0 0 0 0.95  0 0 0 0 0.9  0 0 0 0 0.75  0 0 0 0.04 0"/>
     </filter>
     <rect width="100%" height="100%" filter="url(#noise)"/>
   </svg>
 
-  <header class="masthead">
-    <div class="mark">
+  <header class="bar">
+    <div class="brand">
       <svg class="bird" viewBox="0 0 200 120" aria-hidden="true">
         <defs>
           <linearGradient id="wing" x1="0" y1="0" x2="1" y2="0.6">
@@ -29,85 +29,99 @@
             <stop offset="0.68" stop-color="#3cc9f0"/>
             <stop offset="1"    stop-color="#8a5cf2"/>
           </linearGradient>
-          <radialGradient id="eye" cx="0.5" cy="0.5" r="0.5">
-            <stop offset="0" stop-color="#ffffff"/>
-            <stop offset="1" stop-color="#e8dcb8"/>
-          </radialGradient>
         </defs>
-        <!-- tail -->
         <path d="M118,60 Q170,45 194,55 Q168,62 130,70 Z" fill="#0c0d09"/>
-        <path d="M118,60 Q170,45 194,55 Q168,62 130,70 Z" fill="url(#wing)" opacity="0.35"/>
-        <!-- body -->
         <ellipse cx="88" cy="62" rx="38" ry="18" fill="#0c0d09"/>
-        <!-- white belly patch -->
         <ellipse cx="80" cy="70" rx="22" ry="9" fill="#e8dcb8" opacity="0.92"/>
-        <!-- wing -->
         <path d="M92,50 Q110,40 124,58 Q110,66 88,62 Z" fill="url(#wing)"/>
-        <!-- head -->
         <circle cx="52" cy="52" r="14" fill="#0c0d09"/>
-        <!-- beak -->
         <path d="M40,52 L24,48 L40,58 Z" fill="#0c0d09"/>
-        <!-- eye -->
-        <circle cx="50" cy="49" r="2" fill="url(#eye)"/>
-        <!-- feet -->
-        <path d="M74,80 L72,92 M74,80 L78,92 M98,80 L96,92 M98,80 L102,92"
-              stroke="#0c0d09" stroke-width="1.4" fill="none" stroke-linecap="round"/>
+        <circle cx="50" cy="49" r="2" fill="#e8dcb8"/>
       </svg>
-      <div class="wordmark">
-        <span class="label">magpie</span>
-        <span class="volume" id="volume">no. 001</span>
-      </div>
+      <span class="word">magpie</span>
+      <span class="tag">a cabinet of captioned things</span>
     </div>
-
-    <h1 class="title">
-      <span class="line one">a cabinet of</span>
-      <em class="line two">captioned</em>
-      <span class="line three">things</span>
-    </h1>
-
-    <p class="dek">
-      A ledger of photographs, their stolen <span class="oil">shine</span> collected
-      by a local vision model and pinned, one at a time, to the wall.
-    </p>
-
-    <dl class="tickers">
-      <div>
-        <dt>stolen this week</dt>
-        <dd id="count-week">—</dd>
-      </div>
-      <div>
-        <dt>last endpoint</dt>
-        <dd id="last-endpoint">—</dd>
-      </div>
-      <div>
-        <dt>ledger entries</dt>
-        <dd id="count-all">—</dd>
-      </div>
+    <dl class="stats">
+      <div><dt>tagged</dt><dd id="stat-all">—</dd></div>
+      <div><dt>this week</dt><dd id="stat-week">—</dd></div>
+      <div><dt>endpoint</dt><dd id="stat-ep">—</dd></div>
     </dl>
   </header>
 
   <main>
-    <section class="cabinet" id="cabinet">
-      <div class="section-head">
-        <h2>The Cabinet</h2>
-        <p class="hairline"><span id="cabinet-meta"></span></p>
+    <!-- The actual tool. -->
+    <section class="console" aria-labelledby="console-head">
+      <h2 id="console-head"><span class="n">1.</span> start a run</h2>
+      <form class="run-form" id="run-form" autocomplete="off">
+        <label class="field path">
+          <span>path</span>
+          <input name="path" id="path" type="text" required
+                 placeholder="~/Pictures/some-folder  or  /absolute/path/photo.jpg"
+                 spellcheck="false">
+          <em class="help">file or folder (recursive). tilde is fine.</em>
+        </label>
+        <label class="field ep">
+          <span>endpoint</span>
+          <select name="endpoint" id="endpoint"></select>
+        </label>
+        <label class="field hint">
+          <span>hint <i>(optional)</i></span>
+          <input name="hint" id="hint" type="text"
+                 placeholder="e.g. family trip to taos">
+        </label>
+        <label class="field force">
+          <input type="checkbox" name="force" id="force">
+          <span>force re-tag (ignore marker)</span>
+        </label>
+        <div class="actions">
+          <button type="submit" id="go">
+            <span class="label">tag it</span>
+            <span class="k">↵</span>
+          </button>
+          <span class="run-status" id="run-status"></span>
+        </div>
+      </form>
+    </section>
+
+    <!-- Live progress; hidden until a job is queued. -->
+    <section class="progress" id="progress" hidden aria-labelledby="progress-head">
+      <h2 id="progress-head"><span class="n">2.</span> in flight</h2>
+      <div class="progress-card">
+        <div class="meter">
+          <div class="fill" id="meter-fill"></div>
+        </div>
+        <div class="row">
+          <span class="counts"><em id="p-done">0</em><i>/</i><em id="p-total">?</em> photographs</span>
+          <span class="breakdown">
+            <span>tagged <em id="p-tagged">0</em></span>
+            <span>skipped <em id="p-skipped">0</em></span>
+            <span class="bad">failed <em id="p-failed">0</em></span>
+          </span>
+          <span class="spark" id="p-spark" hidden>◉</span>
+        </div>
+        <div class="current" id="p-current">—</div>
+        <ul class="log" id="p-log"></ul>
       </div>
+    </section>
+
+    <section class="cabinet" id="cabinet" aria-labelledby="cabinet-head">
+      <h2 id="cabinet-head">
+        <span class="n">3.</span> the cabinet
+        <span class="sub" id="cabinet-meta"></span>
+      </h2>
       <div class="shelves" id="shelves" aria-live="polite"></div>
     </section>
 
-    <section class="ledger" id="ledger">
-      <div class="section-head">
-        <h2>The Ledger</h2>
-        <p class="hairline">sessions, in reverse order of occurrence</p>
-      </div>
+    <section class="ledger" id="ledger" aria-labelledby="ledger-head">
+      <h2 id="ledger-head"><span class="n">4.</span> the ledger</h2>
       <ol class="entries" id="entries"></ol>
     </section>
   </main>
 
   <footer>
     <p class="colophon">
-      <em>Pica pica</em> · set in <span>Fraunces</span>, <span>Instrument Serif</span>,
-      and <span>Fragment Mono</span> · served locally from your own nest
+      <em>Pica pica</em> · local-only · served from
+      <span class="mono">~/.local/share/magpie/runs</span>
     </p>
   </footer>
 
