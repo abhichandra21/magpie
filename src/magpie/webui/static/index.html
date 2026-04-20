@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>magpie · a cabinet of captioned things</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght,SOFT@0,9..144,300..900,0..100;1,9..144,300..900,0..100&family=Instrument+Serif:ital@0;1&family=Fragment+Mono:ital@0;1&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="icon" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><circle cx='8' cy='8' r='7' fill='%230c0d09'/><circle cx='8' cy='8' r='2.5' fill='%2300e6c3'/></svg>">
+</head>
+<body>
+  <svg class="grain" aria-hidden="true">
+    <filter id="noise">
+      <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" stitchTiles="stitch"/>
+      <feColorMatrix values="0 0 0 0 0.95  0 0 0 0 0.9  0 0 0 0 0.75  0 0 0 0.07 0"/>
+    </filter>
+    <rect width="100%" height="100%" filter="url(#noise)"/>
+  </svg>
+
+  <header class="masthead">
+    <div class="mark">
+      <svg class="bird" viewBox="0 0 200 120" aria-hidden="true">
+        <defs>
+          <linearGradient id="wing" x1="0" y1="0" x2="1" y2="0.6">
+            <stop offset="0"    stop-color="#015a46"/>
+            <stop offset="0.35" stop-color="#00e6c3"/>
+            <stop offset="0.68" stop-color="#3cc9f0"/>
+            <stop offset="1"    stop-color="#8a5cf2"/>
+          </linearGradient>
+          <radialGradient id="eye" cx="0.5" cy="0.5" r="0.5">
+            <stop offset="0" stop-color="#ffffff"/>
+            <stop offset="1" stop-color="#e8dcb8"/>
+          </radialGradient>
+        </defs>
+        <!-- tail -->
+        <path d="M118,60 Q170,45 194,55 Q168,62 130,70 Z" fill="#0c0d09"/>
+        <path d="M118,60 Q170,45 194,55 Q168,62 130,70 Z" fill="url(#wing)" opacity="0.35"/>
+        <!-- body -->
+        <ellipse cx="88" cy="62" rx="38" ry="18" fill="#0c0d09"/>
+        <!-- white belly patch -->
+        <ellipse cx="80" cy="70" rx="22" ry="9" fill="#e8dcb8" opacity="0.92"/>
+        <!-- wing -->
+        <path d="M92,50 Q110,40 124,58 Q110,66 88,62 Z" fill="url(#wing)"/>
+        <!-- head -->
+        <circle cx="52" cy="52" r="14" fill="#0c0d09"/>
+        <!-- beak -->
+        <path d="M40,52 L24,48 L40,58 Z" fill="#0c0d09"/>
+        <!-- eye -->
+        <circle cx="50" cy="49" r="2" fill="url(#eye)"/>
+        <!-- feet -->
+        <path d="M74,80 L72,92 M74,80 L78,92 M98,80 L96,92 M98,80 L102,92"
+              stroke="#0c0d09" stroke-width="1.4" fill="none" stroke-linecap="round"/>
+      </svg>
+      <div class="wordmark">
+        <span class="label">magpie</span>
+        <span class="volume" id="volume">no. 001</span>
+      </div>
+    </div>
+
+    <h1 class="title">
+      <span class="line one">a cabinet of</span>
+      <em class="line two">captioned</em>
+      <span class="line three">things</span>
+    </h1>
+
+    <p class="dek">
+      A ledger of photographs, their stolen <span class="oil">shine</span> collected
+      by a local vision model and pinned, one at a time, to the wall.
+    </p>
+
+    <dl class="tickers">
+      <div>
+        <dt>stolen this week</dt>
+        <dd id="count-week">—</dd>
+      </div>
+      <div>
+        <dt>last endpoint</dt>
+        <dd id="last-endpoint">—</dd>
+      </div>
+      <div>
+        <dt>ledger entries</dt>
+        <dd id="count-all">—</dd>
+      </div>
+    </dl>
+  </header>
+
+  <main>
+    <section class="cabinet" id="cabinet">
+      <div class="section-head">
+        <h2>The Cabinet</h2>
+        <p class="hairline"><span id="cabinet-meta"></span></p>
+      </div>
+      <div class="shelves" id="shelves" aria-live="polite"></div>
+    </section>
+
+    <section class="ledger" id="ledger">
+      <div class="section-head">
+        <h2>The Ledger</h2>
+        <p class="hairline">sessions, in reverse order of occurrence</p>
+      </div>
+      <ol class="entries" id="entries"></ol>
+    </section>
+  </main>
+
+  <footer>
+    <p class="colophon">
+      <em>Pica pica</em> · set in <span>Fraunces</span>, <span>Instrument Serif</span>,
+      and <span>Fragment Mono</span> · served locally from your own nest
+    </p>
+  </footer>
+
+  <template id="specimen">
+    <article class="specimen">
+      <div class="pin" aria-hidden="true"></div>
+      <figure>
+        <div class="plate">
+          <img alt="" loading="lazy" decoding="async">
+          <span class="caption-num"></span>
+        </div>
+        <figcaption>
+          <p class="cap"></p>
+          <ul class="keywords"></ul>
+          <div class="meta">
+            <span class="model"></span>
+            <span class="dur"></span>
+          </div>
+        </figcaption>
+      </figure>
+    </article>
+  </template>
+
+  <template id="ledger-row">
+    <li class="entry">
+      <span class="num"></span>
+      <span class="ts"></span>
+      <span class="mdl"></span>
+      <span class="bar" aria-hidden="true"><span class="fill"></span></span>
+      <span class="counts"></span>
+    </li>
+  </template>
+
+  <script src="/static/app.js" type="module"></script>
+</body>
+</html>
