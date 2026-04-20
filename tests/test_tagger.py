@@ -151,9 +151,7 @@ async def test_tag_downscales_large_image():
 
     body = json.loads(route.calls[0].request.content.decode())
     msg = body["messages"][-1]
-    image_block = next(
-        part for part in msg["content"] if part.get("type") == "image_url"
-    )
+    image_block = next(part for part in msg["content"] if part.get("type") == "image_url")
     url = image_block["image_url"]["url"]
     assert url.startswith("data:image/jpeg;base64,")
     b64 = url.split(",", 1)[1]
