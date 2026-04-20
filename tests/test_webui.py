@@ -44,8 +44,8 @@ def client(runs_dir):
 def test_index_html_served(client):
     r = client.get("/")
     assert r.status_code == 200
-    assert "a cabinet of" in r.text
-    assert "captioned" in r.text
+    assert "What would you like" in r.text
+    assert 'id="run-form"' in r.text
 
 
 def test_stats_empty(client):
@@ -167,6 +167,120 @@ def test_start_job_rejects_missing_path(client):
 def test_start_job_requires_path(client):
     r = client.post("/api/jobs", json={})
     assert r.status_code == 400
+
+
+def test_validate_path_dir(client, tmp_path, photo):
+    # tmp_path now contains photo (a.jpg)
+    r = client.post("/api/validate", json={"path": str(tmp_path)})
+    body = r.json()
+    assert body["exists"] and body["kind"] == "dir"
+    assert body["images"] >= 1
+
+
+def test_validate_path_file(client, photo):
+    r = client.post("/api/validate", json={"path": str(photo)})
+    body = r.json()
+    assert body["kind"] == "file"
+    assert body["images"] == 1
+
+
+def test_validate_path_missing(client):
+    r = client.post("/api/validate", json={"path": "/no/such/place/zzz.jpg"})
+    body = r.json()
+    assert body["exists"] is False
+
+
+def test_browse_under_root_lists_dirs(tmp_path, monkeypatch, runs_dir):
+    monkeypatch.setenv("MAGPIE_BROWSE_ROOT", str(tmp_path))
+    # rebuild app so the new env var is picked up
+    import importlib
+
+    import magpie.webui.server as srv
+    importlib.reload(srv)
+    fresh = TestClient(srv.build_app(runs_dir=runs_dir))
+
+    (tmp_path / "alpha").mkdir()
+    (tmp_path / "beta").mkdir()
+    shutil.copyfile(FIXTURES / "untagged.jpg", tmp_path / "snap.jpg")
+
+    r = fresh.get("/api/browse")
+    body = r.json()
+    names = [d["name"] for d in body["dirs"]]
+    files = [f["name"] for f in body["files"]]
+    assert "alpha" in names and "beta" in names
+    assert "snap.jpg" in files
+    assert body["crumbs"][0]["path"] == str(tmp_path)
+
+
+def test_browse_rejects_outside_root(tmp_path, monkeypatch, runs_dir):
+    monkeypatch.setenv("MAGPIE_BROWSE_ROOT", str(tmp_path))
+    import importlib
+
+    import magpie.webui.server as srv
+    importlib.reload(srv)
+    fresh = TestClient(srv.build_app(runs_dir=runs_dir))
+    r = fresh.get("/api/browse", params={"path": "/etc"})
+    assert r.status_code == 403
+
+
+def test_config_get_and_put_round_trip(tmp_path, monkeypatch, runs_dir):
+    cfg_path = tmp_path / "config.toml"
+    monkeypatch.setattr("magpie.webui.server.DEFAULT_CONFIG_PATH", cfg_path)
+    monkeypatch.setattr("magpie.config.DEFAULT_CONFIG_PATH", cfg_path)
+    fresh = TestClient(build_app(runs_dir=runs_dir))
+
+    # initial GET creates a default config
+    initial = fresh.get("/api/config").json()
+    assert "mac" in [e["name"] for e in initial["endpoints"]]
+
+    # PUT with edits
+    put = fresh.put(
+        "/api/config",
+        json={
+            "default_endpoint": "spark",
+            "max_keywords": 17,
+            "concurrency": 4,
+            "endpoints": [
+                {"name": "mac", "url": "http://localhost:11434/v1", "model": "gemma4:26b"},
+                {"name": "spark", "url": "http://192.168.1.75:11434/v1", "model": "qwen3-vl:30b", "api_key": ""},
+            ],
+        },
+    )
+    assert put.status_code == 200, put.text
+    after = put.json()
+    assert after["default_endpoint"] == "spark"
+    assert after["max_keywords"] == 17
+    assert after["concurrency"] == 4
+
+    # the prompt block must be preserved
+    text = cfg_path.read_text()
+    assert "[prompt]" in text
+    assert "expert photo cataloger" in text
+
+
+def test_config_put_rejects_invalid(tmp_path, monkeypatch, runs_dir):
+    cfg_path = tmp_path / "config.toml"
+    monkeypatch.setattr("magpie.webui.server.DEFAULT_CONFIG_PATH", cfg_path)
+    monkeypatch.setattr("magpie.config.DEFAULT_CONFIG_PATH", cfg_path)
+    fresh = TestClient(build_app(runs_dir=runs_dir))
+    r = fresh.put(
+        "/api/config",
+        json={
+            "default_endpoint": "ghost",
+            "max_keywords": 1, "concurrency": 1,
+            "endpoints": [
+                {"name": "mac", "url": "x", "model": "m"},
+            ],
+        },
+    )
+    assert r.status_code == 400
+    assert "ghost" in r.json()["detail"]
+
+
+def test_settings_html_served(client):
+    r = client.get("/settings")
+    assert r.status_code == 200
+    assert "Settings" in r.text
 
 
 def test_thumb_404_when_file_missing(runs_dir, client, tmp_path):

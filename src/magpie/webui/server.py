@@ -9,7 +9,9 @@ from __future__ import annotations
 
 import csv
 import io
+import os
 import socket
+import tomllib
 from datetime import datetime
 from pathlib import Path
 
@@ -19,8 +21,11 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from PIL import Image, ImageOps
 
-from magpie.config import Config, ConfigError
+from magpie.config import DEFAULT_CONFIG_PATH, Config, ConfigError
+from magpie.runner import IMAGE_EXTS
 from magpie.webui.jobs import MANAGER
+
+BROWSE_ROOT = Path(os.environ.get("MAGPIE_BROWSE_ROOT") or Path.home()).resolve()
 
 try:
     import pillow_heif
@@ -255,17 +260,253 @@ def build_app(runs_dir: Path | None = None) -> FastAPI:
             headers={"Cache-Control": "public, max-age=3600"},
         )
 
+    @app.post("/api/validate")
+    def validate(payload: dict = Body(default_factory=dict)) -> JSONResponse:  # noqa: B008
+        raw = (payload or {}).get("path", "").strip()
+        if not raw:
+            return JSONResponse({"exists": False, "kind": None, "images": 0, "error": ""})
+        try:
+            p = Path(raw).expanduser().resolve(strict=False)
+        except OSError as exc:
+            return JSONResponse({"exists": False, "kind": None, "images": 0,
+                                 "error": str(exc)})
+        if not p.exists():
+            return JSONResponse({"exists": False, "kind": None, "images": 0,
+                                 "error": "does not exist"})
+        if p.is_file():
+            ok = p.suffix.lower() in IMAGE_EXTS
+            return JSONResponse({
+                "exists": True,
+                "kind": "file",
+                "images": 1 if ok else 0,
+                "resolved": str(p),
+                "error": "" if ok else f"unsupported extension {p.suffix}",
+            })
+        if p.is_dir():
+            n = sum(1 for c in p.rglob("*")
+                    if c.is_file() and c.suffix.lower() in IMAGE_EXTS)
+            return JSONResponse({
+                "exists": True,
+                "kind": "dir",
+                "images": n,
+                "resolved": str(p),
+                "error": "" if n > 0 else "no supported images found",
+            })
+        return JSONResponse({"exists": True, "kind": "other", "images": 0,
+                             "resolved": str(p), "error": "not a file or folder"})
+
+    @app.get("/api/browse")
+    def browse(path: str = Query(default="")) -> JSONResponse:
+        target = Path(path).expanduser() if path else BROWSE_ROOT
+        try:
+            target = target.resolve(strict=False)
+        except OSError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        if not _under_root(target, BROWSE_ROOT):
+            raise HTTPException(status_code=403, detail=f"outside {BROWSE_ROOT}")
+        if not target.exists() or not target.is_dir():
+            raise HTTPException(status_code=404, detail="not a directory")
+
+        dirs: list[dict] = []
+        files: list[dict] = []
+        for child in sorted(target.iterdir(), key=lambda c: c.name.lower()):
+            if child.name.startswith("."):
+                continue
+            try:
+                if child.is_dir():
+                    dirs.append({"name": child.name, "path": str(child), "kind": "dir"})
+                elif child.is_file() and child.suffix.lower() in IMAGE_EXTS:
+                    files.append(
+                        {
+                            "name": child.name,
+                            "path": str(child),
+                            "kind": "file",
+                            "size": child.stat().st_size,
+                        }
+                    )
+            except OSError:
+                continue
+
+        crumbs: list[dict] = []
+        cursor = target
+        while _under_root(cursor, BROWSE_ROOT):
+            crumbs.append({"name": cursor.name or str(cursor), "path": str(cursor)})
+            if cursor == BROWSE_ROOT:
+                break
+            cursor = cursor.parent
+        crumbs.reverse()
+
+        return JSONResponse(
+            {
+                "path": str(target),
+                "root": str(BROWSE_ROOT),
+                "crumbs": crumbs,
+                "dirs": dirs,
+                "files": files,
+            }
+        )
+
+    @app.get("/api/config")
+    def get_config() -> JSONResponse:
+        cfg = _load_config()
+        return JSONResponse(
+            {
+                "default_endpoint": cfg.default_endpoint,
+                "max_keywords": cfg.max_keywords,
+                "concurrency": cfg.concurrency,
+                "endpoints": [
+                    {
+                        "name": name,
+                        "url": ep.url,
+                        "model": ep.model,
+                        "has_api_key": bool(ep.api_key),
+                    }
+                    for name, ep in sorted(cfg.endpoints.items())
+                ],
+                "config_path": str(DEFAULT_CONFIG_PATH),
+            }
+        )
+
+    @app.put("/api/config")
+    def put_config(payload: dict = Body(default_factory=dict)) -> JSONResponse:  # noqa: B008
+        try:
+            _write_config(payload)
+        except ConfigError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return get_config()
+
     if STATIC_DIR.exists():
         app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
     @app.get("/")
     def index() -> FileResponse:
-        html = STATIC_DIR / "index.html"
-        if not html.exists():
-            raise HTTPException(status_code=500, detail="index.html missing")
-        return FileResponse(html, media_type="text/html")
+        return _static_page("index.html")
+
+    @app.get("/settings")
+    def settings_page() -> FileResponse:
+        return _static_page("settings.html")
 
     return app
+
+
+def _static_page(name: str) -> FileResponse:
+    html = STATIC_DIR / name
+    if not html.exists():
+        raise HTTPException(status_code=500, detail=f"{name} missing")
+    return FileResponse(html, media_type="text/html")
+
+
+def _under_root(p: Path, root: Path) -> bool:
+    try:
+        p.relative_to(root)
+        return True
+    except ValueError:
+        return False
+
+
+def _write_config(payload: dict) -> None:
+    if not isinstance(payload, dict):
+        raise ValueError("payload must be an object")
+    default_endpoint = str(payload.get("default_endpoint") or "").strip()
+    if not default_endpoint:
+        raise ValueError("default_endpoint is required")
+    try:
+        max_keywords = int(payload.get("max_keywords"))
+        concurrency = int(payload.get("concurrency"))
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            "max_keywords and concurrency must be integers"
+        ) from exc
+    if max_keywords <= 0 or concurrency <= 0:
+        raise ValueError("max_keywords and concurrency must be positive")
+
+    endpoints = payload.get("endpoints")
+    if not isinstance(endpoints, list) or not endpoints:
+        raise ValueError("at least one endpoint is required")
+    existing_keys = _read_existing_api_keys(DEFAULT_CONFIG_PATH)
+    names: set[str] = set()
+    cleaned: list[dict] = []
+    for ep in endpoints:
+        if not isinstance(ep, dict):
+            raise ValueError("each endpoint must be an object")
+        name = str(ep.get("name") or "").strip()
+        url = str(ep.get("url") or "").strip()
+        model = str(ep.get("model") or "").strip()
+        # Preserve existing key when "api_key" is absent from payload; allow
+        # explicit empty string to clear it.
+        api_key = (
+            str(ep["api_key"] or "") if "api_key" in ep else existing_keys.get(name, "")
+        )
+        if not name or not name.isidentifier():
+            raise ValueError(f"invalid endpoint name: {name!r}")
+        if name in names:
+            raise ValueError(f"duplicate endpoint name: {name}")
+        if not url or not model:
+            raise ValueError(f"endpoint {name!r} requires url and model")
+        names.add(name)
+        cleaned.append({"name": name, "url": url, "model": model, "api_key": api_key})
+    if default_endpoint not in names:
+        raise ValueError(
+            f"default_endpoint {default_endpoint!r} is not one of the configured endpoints"
+        )
+
+    path = DEFAULT_CONFIG_PATH
+    existing_prompt = _read_prompt_block(path)
+    lines: list[str] = [
+        f'default_endpoint = "{default_endpoint}"',
+        f"max_keywords = {max_keywords}",
+        f"concurrency = {concurrency}",
+        "",
+    ]
+    for ep in cleaned:
+        lines.append(f"[endpoints.{ep['name']}]")
+        lines.append(f'url = "{_toml_escape(ep["url"])}"')
+        lines.append(f'model = "{_toml_escape(ep["model"])}"')
+        lines.append(f'api_key = "{_toml_escape(ep["api_key"])}"')
+        lines.append("")
+    lines.append(existing_prompt)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("\n".join(lines).rstrip() + "\n")
+
+
+def _read_existing_api_keys(path: Path) -> dict[str, str]:
+    if not path.exists():
+        return {}
+    try:
+        data = tomllib.loads(path.read_text())
+    except tomllib.TOMLDecodeError:
+        return {}
+    out: dict[str, str] = {}
+    for name, ep in (data.get("endpoints") or {}).items():
+        if isinstance(ep, dict) and isinstance(ep.get("api_key"), str):
+            out[name] = ep["api_key"]
+    return out
+
+
+def _read_prompt_block(path: Path) -> str:
+    """Return the `[prompt]` section verbatim from an existing config, or a default."""
+    if path.exists():
+        text = path.read_text()
+        try:
+            tomllib.loads(text)
+        except tomllib.TOMLDecodeError:
+            text = ""
+        if text:
+            lines = text.splitlines()
+            for idx, line in enumerate(lines):
+                if line.strip() == "[prompt]":
+                    return "\n".join(lines[idx:])
+    # fallback to the default
+    from magpie.config import DEFAULT_CONFIG_TOML
+
+    marker = DEFAULT_CONFIG_TOML.find("[prompt]")
+    return DEFAULT_CONFIG_TOML[marker:] if marker != -1 else ""
+
+
+def _toml_escape(s: str) -> str:
+    return s.replace("\\", "\\\\").replace('"', '\\"')
 
 
 def _pick_port(requested: int) -> int:

@@ -6,153 +6,137 @@
   <title>magpie</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..900;1,9..144,300..900&family=Instrument+Serif:ital@0;1&family=Fragment+Mono:ital@0;1&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&family=Newsreader:ital,opsz,wght@0,6..72,300..700;1,6..72,300..700&family=Public+Sans:ital,wght@0,300..700;1,300..700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/style.css">
-  <link rel="icon" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><circle cx='8' cy='8' r='7' fill='%230c0d09'/><circle cx='8' cy='8' r='2.5' fill='%2300e6c3'/></svg>">
+  <link rel="icon" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><circle cx='8' cy='8' r='7' fill='%230f0c14'/><circle cx='8' cy='8' r='2.5' fill='%23e39462'/></svg>">
 </head>
 <body>
-  <svg class="grain" aria-hidden="true">
-    <filter id="noise">
-      <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" stitchTiles="stitch"/>
-      <feColorMatrix values="0 0 0 0 0.95  0 0 0 0 0.9  0 0 0 0 0.75  0 0 0 0.04 0"/>
-    </filter>
-    <rect width="100%" height="100%" filter="url(#noise)"/>
-  </svg>
-
-  <header class="bar">
-    <div class="brand">
-      <svg class="bird" viewBox="0 0 200 120" aria-hidden="true">
+  <nav>
+    <a class="nav-brand" href="/">
+      <svg viewBox="0 0 200 120" aria-hidden="true">
         <defs>
           <linearGradient id="wing" x1="0" y1="0" x2="1" y2="0.6">
-            <stop offset="0"    stop-color="#015a46"/>
-            <stop offset="0.35" stop-color="#00e6c3"/>
-            <stop offset="0.68" stop-color="#3cc9f0"/>
-            <stop offset="1"    stop-color="#8a5cf2"/>
+            <stop offset="0" stop-color="#2fbf9b"/>
+            <stop offset="0.55" stop-color="#48c9d6"/>
+            <stop offset="1" stop-color="#8a5cf2"/>
           </linearGradient>
         </defs>
-        <path d="M118,60 Q170,45 194,55 Q168,62 130,70 Z" fill="#0c0d09"/>
-        <ellipse cx="88" cy="62" rx="38" ry="18" fill="#0c0d09"/>
-        <ellipse cx="80" cy="70" rx="22" ry="9" fill="#e8dcb8" opacity="0.92"/>
+        <path d="M118,60 Q170,45 194,55 Q168,62 130,70 Z" fill="#0f0c14"/>
+        <ellipse cx="88" cy="62" rx="38" ry="18" fill="#0f0c14"/>
+        <ellipse cx="80" cy="70" rx="22" ry="9" fill="#f0ecf5" opacity="0.92"/>
         <path d="M92,50 Q110,40 124,58 Q110,66 88,62 Z" fill="url(#wing)"/>
-        <circle cx="52" cy="52" r="14" fill="#0c0d09"/>
-        <path d="M40,52 L24,48 L40,58 Z" fill="#0c0d09"/>
-        <circle cx="50" cy="49" r="2" fill="#e8dcb8"/>
+        <circle cx="52" cy="52" r="14" fill="#0f0c14"/>
+        <path d="M40,52 L24,48 L40,58 Z" fill="#0f0c14"/>
+        <circle cx="50" cy="49" r="2" fill="#f0ecf5"/>
       </svg>
-      <span class="word">magpie</span>
-      <span class="tag">a cabinet of captioned things</span>
+      <span class="nav-brand-word">mag<em>pie</em></span>
+    </a>
+    <div class="nav-group">
+      <a class="nav-link active" href="/">Tag</a>
+      <a class="nav-link" href="/settings">Settings</a>
     </div>
-    <dl class="stats">
-      <div><dt>tagged</dt><dd id="stat-all">—</dd></div>
-      <div><dt>this week</dt><dd id="stat-week">—</dd></div>
-      <div><dt>endpoint</dt><dd id="stat-ep">—</dd></div>
-    </dl>
-  </header>
+    <div class="nav-system">
+      <a class="nav-link" href="https://github.com/abhichandra21/magpie" target="_blank" rel="noopener">GitHub</a>
+    </div>
+  </nav>
 
   <main>
-    <!-- The actual tool. -->
-    <section class="console" aria-labelledby="console-head">
-      <h2 id="console-head"><span class="n">1.</span> start a run</h2>
-      <form class="run-form" id="run-form" autocomplete="off">
-        <label class="field path">
-          <span>path</span>
-          <input name="path" id="path" type="text" required
+    <section class="hero">
+      <h1>What would you like<br>to <span class="accent">tag</span>?</h1>
+      <p class="sub">Drop in a folder or single photo. magpie writes captions and keywords directly into the file via your local vision model.</p>
+
+      <form id="run-form" autocomplete="off">
+        <div class="path-row">
+          <input class="input-field" id="path" name="path" type="text"
                  placeholder="~/Pictures/some-folder  or  /absolute/path/photo.jpg"
-                 spellcheck="false">
-          <em class="help">file or folder (recursive). tilde is fine.</em>
-        </label>
-        <label class="field ep">
-          <span>endpoint</span>
-          <select name="endpoint" id="endpoint"></select>
-        </label>
-        <label class="field hint">
-          <span>hint <i>(optional)</i></span>
-          <input name="hint" id="hint" type="text"
-                 placeholder="e.g. family trip to taos">
-        </label>
-        <label class="field force">
-          <input type="checkbox" name="force" id="force">
-          <span>force re-tag (ignore marker)</span>
-        </label>
-        <div class="actions">
-          <button type="submit" id="go">
-            <span class="label">tag it</span>
-            <span class="k">↵</span>
-          </button>
-          <span class="run-status" id="run-status"></span>
+                 spellcheck="false" required>
+          <button type="button" class="btn-browse" id="browse">Browse</button>
+          <button type="submit" class="btn-tag" id="go">Tag it</button>
+        </div>
+        <div class="path-hint" id="path-hint">paste a path, or browse — magpie will recurse into folders</div>
+        <div id="picker-host"></div>
+
+        <div class="opts">
+          <label>
+            <span>Endpoint</span>
+            <select class="input-field" id="endpoint"></select>
+          </label>
+          <label>
+            <span>Hint <i style="color:var(--muted); font-style: italic;">— optional</i></span>
+            <input class="input-field" id="hint" type="text" placeholder="e.g. trip to Taos, holiday photos">
+          </label>
+          <label class="toggle">
+            <input type="checkbox" id="force">
+            <span>Force re-tag</span>
+          </label>
         </div>
       </form>
     </section>
 
-    <!-- Live progress; hidden until a job is queued. -->
-    <section class="progress" id="progress" hidden aria-labelledby="progress-head">
-      <h2 id="progress-head"><span class="n">2.</span> in flight</h2>
+    <section id="progress" hidden>
+      <div class="section-label">
+        <span>In flight</span>
+        <span class="rule"></span>
+        <span class="right" id="run-status">—</span>
+      </div>
       <div class="progress-card">
-        <div class="meter">
-          <div class="fill" id="meter-fill"></div>
-        </div>
+        <div class="meter"><div class="fill" id="meter-fill"></div></div>
         <div class="row">
-          <span class="counts"><em id="p-done">0</em><i>/</i><em id="p-total">?</em> photographs</span>
+          <span><em id="p-done">0</em><i> / </i><em id="p-total">?</em> photographs</span>
           <span class="breakdown">
-            <span>tagged <em id="p-tagged">0</em></span>
+            <span class="good">tagged <em id="p-tagged">0</em></span>
             <span>skipped <em id="p-skipped">0</em></span>
             <span class="bad">failed <em id="p-failed">0</em></span>
           </span>
-          <span class="spark" id="p-spark" hidden>◉</span>
         </div>
         <div class="current" id="p-current">—</div>
         <ul class="log" id="p-log"></ul>
       </div>
     </section>
 
-    <section class="cabinet" id="cabinet" aria-labelledby="cabinet-head">
-      <h2 id="cabinet-head">
-        <span class="n">3.</span> the cabinet
-        <span class="sub" id="cabinet-meta"></span>
-      </h2>
-      <div class="shelves" id="shelves" aria-live="polite"></div>
+    <section id="recent">
+      <div class="section-label">
+        <span>Recent runs</span>
+        <span class="rule"></span>
+        <span class="right" id="stat-summary">—</span>
+      </div>
+      <table class="runs-table" id="runs-table">
+        <thead>
+          <tr>
+            <th>When</th>
+            <th>Model</th>
+            <th>Tagged · Skipped · Failed</th>
+            <th>Duration</th>
+          </tr>
+        </thead>
+        <tbody id="runs-tbody"></tbody>
+      </table>
     </section>
 
-    <section class="ledger" id="ledger" aria-labelledby="ledger-head">
-      <h2 id="ledger-head"><span class="n">4.</span> the ledger</h2>
-      <ol class="entries" id="entries"></ol>
+    <section id="cabinet">
+      <div class="section-label">
+        <span>Latest specimens</span>
+        <span class="rule"></span>
+        <span class="right" id="cabinet-meta">—</span>
+      </div>
+      <div class="cabinet-strip" id="shelves"></div>
     </section>
   </main>
 
   <footer>
-    <p class="colophon">
-      <em>Pica pica</em> · local-only · served from
-      <span class="mono">~/.local/share/magpie/runs</span>
-    </p>
+    <span class="mono">Pica pica · local-only</span>
+    <span class="sep">·</span>
+    <span class="mono" id="footer-csv">runs at ~/.local/share/magpie/runs</span>
   </footer>
 
-  <template id="specimen">
-    <article class="specimen">
-      <div class="pin" aria-hidden="true"></div>
-      <figure>
-        <div class="plate">
-          <img alt="" loading="lazy" decoding="async">
-          <span class="caption-num"></span>
-        </div>
-        <figcaption>
-          <p class="cap"></p>
-          <ul class="keywords"></ul>
-          <div class="meta">
-            <span class="model"></span>
-            <span class="dur"></span>
-          </div>
-        </figcaption>
-      </figure>
+  <template id="card">
+    <article class="card">
+      <img alt="" loading="lazy" decoding="async">
+      <div class="body">
+        <div class="cap"></div>
+        <div class="kws"></div>
+      </div>
     </article>
-  </template>
-
-  <template id="ledger-row">
-    <li class="entry">
-      <span class="num"></span>
-      <span class="ts"></span>
-      <span class="mdl"></span>
-      <span class="bar" aria-hidden="true"><span class="fill"></span></span>
-      <span class="counts"></span>
-    </li>
   </template>
 
   <script src="/static/app.js" type="module"></script>
