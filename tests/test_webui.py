@@ -2,6 +2,7 @@ import csv
 import io
 import shutil
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
@@ -99,6 +100,25 @@ def test_runs_and_stats_count(runs_dir, client, photo):
     # newest first
     assert runs[0]["id"] == "2026-04-20T11-00-00"
     assert runs[1]["tagged"] == 1
+
+
+def test_runs_parse_high_precision_timestamps(runs_dir, client, photo):
+    _write_csv(
+        runs_dir / "2026-04-20T10-00-00-123456.csv",
+        [
+            {
+                "path": str(photo),
+                "status": "tagged",
+                "model": "gemma4:26b",
+                "caption": "a photo",
+                "keyword_count": "3",
+                "duration_ms": "1200",
+                "error": "",
+            }
+        ],
+    )
+    runs = client.get("/api/runs").json()
+    assert runs[0]["timestamp"] == "2026-04-20T10:00:00.123456"
 
 
 def test_run_detail_enriches_keywords_from_iptc(runs_dir, client, photo):
@@ -279,6 +299,43 @@ def test_config_put_accepts_non_identifier_library_names(tmp_path, monkeypatch, 
     assert "Chicago-Air-Show = " in text  # bare key (hyphens are TOML-legal)
 
 
+def test_config_put_can_clear_existing_api_key(tmp_path, monkeypatch, runs_dir):
+    cfg_path = tmp_path / "config.toml"
+    cfg_path.write_text(
+        """
+default_endpoint = "mac"
+max_keywords = 25
+concurrency = 2
+
+[endpoints.mac]
+url = "http://x/v1"
+model = "m"
+api_key = "secret"
+
+[prompt]
+system = "s"
+user_template = "u {hint}"
+"""
+    )
+    monkeypatch.setattr("magpie.webui.server.DEFAULT_CONFIG_PATH", cfg_path)
+    monkeypatch.setattr("magpie.config.DEFAULT_CONFIG_PATH", cfg_path)
+    fresh = TestClient(build_app(runs_dir=runs_dir))
+
+    r = fresh.put(
+        "/api/config",
+        json={
+            "default_endpoint": "mac",
+            "max_keywords": 25,
+            "concurrency": 2,
+            "endpoints": [
+                {"name": "mac", "url": "http://x/v1", "model": "m", "api_key": ""}
+            ],
+        },
+    )
+    assert r.status_code == 200, r.text
+    assert 'api_key = ""' in cfg_path.read_text()
+
+
 def test_config_put_saves_libraries_then_endpoints_preserves_prompt(tmp_path, monkeypatch, runs_dir):
     cfg_path = tmp_path / "config.toml"
     monkeypatch.setattr("magpie.webui.server.DEFAULT_CONFIG_PATH", cfg_path)
@@ -421,6 +478,148 @@ user_template = "u {{hint}}"
     assert [i["name"] for i in only_tagged["items"]] == ["t.jpg"]
     only_untagged = fresh.get("/api/library/shots?filter=untagged").json()
     assert [i["name"] for i in only_untagged["items"]] == ["u.jpg"]
+
+
+def test_library_filter_applies_before_paging(tmp_path, monkeypatch, runs_dir):
+    cfg = tmp_path / "config.toml"
+    photos = tmp_path / "photos"
+    photos.mkdir()
+    for idx in range(60):
+        shutil.copyfile(FIXTURES / "already_tagged.jpg", photos / f"t{idx:03d}.jpg")
+    shutil.copyfile(FIXTURES / "untagged.jpg", photos / "z.jpg")
+    cfg.write_text(
+        f"""
+default_endpoint = "mac"
+max_keywords = 25
+concurrency = 2
+[endpoints.mac]
+url = "http://x/v1"
+model = "m"
+api_key = ""
+[libraries]
+shots = "{photos}"
+[prompt]
+system = "s"
+user_template = "u {{hint}}"
+"""
+    )
+    monkeypatch.setattr("magpie.webui.server.DEFAULT_CONFIG_PATH", cfg)
+    monkeypatch.setattr("magpie.config.DEFAULT_CONFIG_PATH", cfg)
+    fresh = TestClient(build_app(runs_dir=runs_dir))
+    body = fresh.get(
+        "/api/library/shots",
+        params={"filter": "untagged", "offset": 0, "limit": 60},
+    ).json()
+    assert body["meta"]["total"] == 1
+    assert [item["name"] for item in body["items"]] == ["z.jpg"]
+
+
+def test_start_job_filter_untagged_submits_matching_files(tmp_path, monkeypatch, runs_dir):
+    import magpie.webui.server as srv
+
+    photos = tmp_path / "photos"
+    photos.mkdir()
+    tagged = photos / "t.jpg"
+    untagged = photos / "u.jpg"
+    shutil.copyfile(FIXTURES / "already_tagged.jpg", tagged)
+    shutil.copyfile(FIXTURES / "untagged.jpg", untagged)
+
+    captured: dict = {}
+
+    def fake_submit(cfg, path, endpoint, hint, force, inputs=None):
+        captured.update(
+            {
+                "cfg": cfg,
+                "path": path,
+                "endpoint": endpoint,
+                "hint": hint,
+                "force": force,
+                "inputs": inputs,
+            }
+        )
+        return SimpleNamespace(id="job123")
+
+    monkeypatch.setattr(srv, "_load_config", lambda: object())
+    monkeypatch.setattr(srv.MANAGER, "submit", fake_submit)
+    fresh = TestClient(srv.build_app(runs_dir=runs_dir))
+
+    r = fresh.post(
+        "/api/jobs",
+        json={"path": str(photos), "filter": "untagged", "force": False},
+    )
+    assert r.status_code == 202, r.text
+    assert captured["path"] == str(photos)
+    assert captured["force"] is True
+    assert captured["inputs"] == [str(untagged)]
+
+
+def test_start_job_filter_untagged_preserves_empty_selection(tmp_path, monkeypatch, runs_dir):
+    import magpie.webui.server as srv
+
+    photos = tmp_path / "photos"
+    photos.mkdir()
+    tagged = photos / "t.jpg"
+    shutil.copyfile(FIXTURES / "already_tagged.jpg", tagged)
+
+    captured: dict = {}
+
+    def fake_submit(cfg, path, endpoint, hint, force, inputs=None):
+        captured.update(
+            {
+                "cfg": cfg,
+                "path": path,
+                "endpoint": endpoint,
+                "hint": hint,
+                "force": force,
+                "inputs": inputs,
+            }
+        )
+        return SimpleNamespace(id="job123")
+
+    monkeypatch.setattr(srv, "_load_config", lambda: object())
+    monkeypatch.setattr(srv.MANAGER, "submit", fake_submit)
+    fresh = TestClient(srv.build_app(runs_dir=runs_dir))
+
+    r = fresh.post(
+        "/api/jobs",
+        json={"path": str(photos), "filter": "untagged", "force": False},
+    )
+    assert r.status_code == 202, r.text
+    assert captured["path"] == str(photos)
+    assert captured["force"] is True
+    assert captured["inputs"] == []
+
+
+def test_start_job_filtered_scan_failure_returns_503(tmp_path, monkeypatch, runs_dir):
+    import magpie.webui.server as srv
+
+    photos = tmp_path / "photos"
+    photos.mkdir()
+    shutil.copyfile(FIXTURES / "untagged.jpg", photos / "u.jpg")
+
+    called = False
+
+    def fake_submit(*_args, **_kwargs):
+        nonlocal called
+        called = True
+        return SimpleNamespace(id="job123")
+
+    monkeypatch.setattr(srv, "_load_config", lambda: object())
+    monkeypatch.setattr(
+        srv,
+        "_read_tags",
+        lambda *args, **kwargs: (_ for _ in ()).throw(srv.LibraryScanError("boom")),
+    )
+    monkeypatch.setattr(srv.MANAGER, "submit", fake_submit)
+    fresh = TestClient(srv.build_app(runs_dir=runs_dir))
+
+    r = fresh.post(
+        "/api/jobs",
+        json={"path": str(photos), "filter": "untagged", "force": False},
+    )
+    assert r.status_code == 503
+    assert "could not scan metadata" in r.json()["detail"]
+    assert called is False
 
 
 def test_thumb_serves_library_path(tmp_path, monkeypatch, runs_dir):

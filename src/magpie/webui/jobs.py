@@ -37,6 +37,7 @@ class Job:
     model: str
     hint: str
     force: bool
+    inputs: tuple[str, ...] = field(default_factory=tuple, repr=False)
     status: str = "queued"  # queued | running | done | failed
     started: float | None = None
     finished: float | None = None
@@ -77,6 +78,7 @@ class JobManager:
         endpoint: str | None,
         hint: str,
         force: bool,
+        inputs: list[str] | None = None,
     ) -> Job:
         ep = cfg.endpoint(endpoint)
         job = Job(
@@ -86,6 +88,7 @@ class JobManager:
             model=ep.model,
             hint=hint,
             force=force,
+            inputs=tuple([path] if inputs is None else inputs),
         )
         with self._lock:
             self._jobs[job.id] = job
@@ -221,7 +224,10 @@ class JobManager:
                 hint=job.hint,
                 progress=progress,
             )
-            summary = await runner.run([Path(job.path)], force=job.force)
+            summary = await runner.run(
+                [Path(raw_path) for raw_path in job.inputs],
+                force=job.force,
+            )
 
         job.tagged = summary.tagged
         job.skipped = summary.skipped

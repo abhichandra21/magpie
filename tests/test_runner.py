@@ -1,11 +1,12 @@
 import asyncio
 import csv
 import shutil
+from datetime import datetime
 from pathlib import Path
 
 import pytest
 
-from magpie.runner import BatchRunner, RunStatus
+from magpie.runner import BatchRunner, RunStatus, default_csv_path
 from magpie.tagger import TagResult
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -199,3 +200,10 @@ async def test_single_file_path_is_processed(tmp_path, csv_path):
     )
     summary = await runner.run([f])
     assert summary.tagged == 1
+
+
+def test_default_csv_path_uses_subsecond_precision():
+    early = default_csv_path(datetime(2026, 4, 20, 10, 0, 0, 123456))
+    later = default_csv_path(datetime(2026, 4, 20, 10, 0, 0, 123457))
+    assert early != later
+    assert early.name.endswith("2026-04-20T10-00-00-123456.csv")

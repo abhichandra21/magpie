@@ -44,6 +44,11 @@ except ImportError:
 DEFAULT_RUNS_DIR = Path.home() / ".local" / "share" / "magpie" / "runs"
 STATIC_DIR = Path(__file__).parent / "static"
 THUMB_MAX_EDGE = 900
+LIBRARY_SCAN_BATCH = 200
+
+
+class LibraryScanError(RuntimeError):
+    """Raised when a filtered library scan cannot classify every file safely."""
 
 
 def _runs_dir() -> Path:
@@ -64,10 +69,7 @@ def _run_meta(path: Path) -> dict:
     failed = sum(1 for r in rows if r.get("status") == "failed")
     models = sorted({r.get("model", "") for r in rows if r.get("model")})
     total_ms = sum(int(r.get("duration_ms") or 0) for r in rows)
-    try:
-        stamp = datetime.strptime(path.stem, "%Y-%m-%dT%H-%M-%S").isoformat()
-    except ValueError:
-        stamp = path.stem
+    stamp = _run_stem_to_iso(path.stem)
     return {
         "id": path.stem,
         "timestamp": stamp,
@@ -79,7 +81,12 @@ def _run_meta(path: Path) -> dict:
     }
 
 
-def _read_tags(paths: list[str], with_dims: bool = False) -> dict[str, dict]:
+def _read_tags(
+    paths: list[str],
+    with_dims: bool = False,
+    *,
+    strict: bool = False,
+) -> dict[str, dict]:
     """Pull IPTC keywords (and optionally pixel dims) via exiftool. Skips missing files."""
     existing = [p for p in paths if p and Path(p).exists()]
     out: dict[str, dict] = {}
@@ -91,7 +98,9 @@ def _read_tags(paths: list[str], with_dims: bool = False) -> dict[str, dict]:
     try:
         with exiftool.ExifToolHelper() as et:
             metas = et.get_tags(existing, tags=tags)
-    except Exception:
+    except Exception as exc:
+        if strict:
+            raise LibraryScanError("metadata scan failed") from exc
         return out
     for m in metas:
         src = m.get("SourceFile") or ""
@@ -120,7 +129,103 @@ def _read_tags(paths: list[str], with_dims: bool = False) -> dict[str, dict]:
             entry["width"] = w
             entry["height"] = h
         out[src] = entry
+    if strict:
+        missing = [path for path in existing if path not in out]
+        if missing:
+            raise LibraryScanError("metadata scan returned incomplete results")
     return out
+
+
+def _run_stem_to_iso(stem: str) -> str:
+    match = re.match(
+        r"^(?P<stamp>\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2})(?:-(?P<micros>\d{6}))?$",
+        stem,
+    )
+    if not match:
+        return stem
+    stamp = match.group("stamp")
+    micros = match.group("micros")
+    try:
+        if micros:
+            return datetime.strptime(
+                f"{stamp}-{micros}", "%Y-%m-%dT%H-%M-%S-%f"
+            ).isoformat()
+        return datetime.strptime(stamp, "%Y-%m-%dT%H-%M-%S").isoformat()
+    except ValueError:
+        return stem
+
+
+def _library_image_paths(root: Path) -> list[Path]:
+    return [
+        p
+        for p in sorted(root.rglob("*"))
+        if p.is_file() and p.suffix.lower() in IMAGE_EXTS
+    ]
+
+
+def _library_tagged(meta: dict) -> bool:
+    return bool((meta.get("caption") or "") or (meta.get("keywords") or []))
+
+
+def _library_filter_matches(tagged: bool, filter_name: str) -> bool:
+    if filter_name == "tagged":
+        return tagged
+    if filter_name == "untagged":
+        return not tagged
+    return True
+
+
+def _select_library_paths(
+    all_files: list[Path],
+    *,
+    filter_name: str,
+    offset: int = 0,
+    limit: int | None = None,
+    strict: bool = False,
+) -> tuple[int, list[Path]]:
+    end = None if limit is None else offset + limit
+    if filter_name == "all":
+        return len(all_files), all_files[offset:end]
+
+    total = 0
+    page: list[Path] = []
+    for start in range(0, len(all_files), LIBRARY_SCAN_BATCH):
+        chunk = all_files[start : start + LIBRARY_SCAN_BATCH]
+        tags_by_path = _read_tags([str(p) for p in chunk], strict=strict)
+        for path in chunk:
+            tagged = _library_tagged(tags_by_path.get(str(path), {}))
+            if not _library_filter_matches(tagged, filter_name):
+                continue
+            if total >= offset and (end is None or total < end):
+                page.append(path)
+            total += 1
+    return total, page
+
+
+def _library_item(root: Path, path: Path, meta: dict) -> dict:
+    caption = meta.get("caption") or ""
+    keywords = meta.get("keywords") or []
+    tagged = _library_tagged(meta)
+    try:
+        st = path.stat()
+        size = st.st_size
+        mtime = st.st_mtime
+    except OSError:
+        size = 0
+        mtime = 0
+    rel = str(path.relative_to(root))
+    return {
+        "path": str(path),
+        "rel": rel,
+        "name": path.name,
+        "caption": caption,
+        "keywords": keywords,
+        "tagged": tagged,
+        "size": size,
+        "mtime": mtime,
+        "width": meta.get("width") or 0,
+        "height": meta.get("height") or 0,
+    }
 
 
 def _all_known_paths(runs_dir: Path) -> set[str]:
@@ -193,14 +298,44 @@ def build_app(runs_dir: Path | None = None) -> FastAPI:
         endpoint = (payload or {}).get("endpoint") or None
         hint = (payload or {}).get("hint", "") or ""
         force = bool((payload or {}).get("force", False))
+        run_filter = str((payload or {}).get("filter") or "all").strip()
         if not path:
             raise HTTPException(status_code=400, detail="path is required")
+        if run_filter not in {"all", "tagged", "untagged"}:
+            raise HTTPException(status_code=400, detail="invalid filter")
         src = Path(path).expanduser()
         if not src.exists():
             raise HTTPException(status_code=400, detail=f"path not found: {src}")
         cfg = _load_config()
+        selected_paths: list[str] | None = None
+        submit_force = force
+        if run_filter != "all":
+            all_files = _library_image_paths(src) if src.is_dir() else [src]
+            try:
+                _, matched = _select_library_paths(
+                    all_files,
+                    filter_name=run_filter,
+                    strict=True,
+                )
+            except LibraryScanError as exc:
+                raise HTTPException(
+                    status_code=503,
+                    detail=f"could not scan metadata for filter={run_filter}",
+                ) from exc
+            selected_paths = [str(p) for p in matched]
+            # The explicit selection already applies the Library page's
+            # tagged/untagged rule, so don't re-filter with the writer's
+            # creator-tool-specific skip check.
+            submit_force = True
         try:
-            job = MANAGER.submit(cfg, str(src), endpoint, hint, force)
+            job = MANAGER.submit(
+                cfg,
+                str(src),
+                endpoint,
+                hint,
+                submit_force,
+                inputs=selected_paths,
+            )
         except ConfigError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         return JSONResponse({"id": job.id}, status_code=202)
@@ -361,53 +496,27 @@ def build_app(runs_dir: Path | None = None) -> FastAPI:
         if not root.exists() or not root.is_dir():
             raise HTTPException(status_code=410, detail="library path missing on disk")
 
-        all_files = [
-            p
-            for p in sorted(root.rglob("*"))
-            if p.is_file() and p.suffix.lower() in IMAGE_EXTS
-        ]
-        total = len(all_files)
-        # shallow filtering by name/extension only; the heavy IPTC read happens
-        # after slicing so we don't parse every file in a 10k library per request.
-        page = all_files[offset : offset + limit]
+        all_files = _library_image_paths(root)
+        total, page = _select_library_paths(
+            all_files,
+            filter_name=filter,
+            offset=offset,
+            limit=limit,
+        )
         tags_by_path = _read_tags([str(p) for p in page], with_dims=True)
 
-        items: list[dict] = []
-        for p in page:
-            meta = tags_by_path.get(str(p), {})
-            caption = meta.get("caption") or ""
-            keywords = meta.get("keywords") or []
-            tagged = bool(caption or keywords)
-            if filter == "tagged" and not tagged:
-                continue
-            if filter == "untagged" and tagged:
-                continue
-            try:
-                st = p.stat()
-                size = st.st_size
-                mtime = st.st_mtime
-            except OSError:
-                size = 0
-                mtime = 0
-            rel = str(p.relative_to(root))
-            items.append(
-                {
-                    "path": str(p),
-                    "rel": rel,
-                    "name": p.name,
-                    "caption": caption,
-                    "keywords": keywords,
-                    "tagged": tagged,
-                    "size": size,
-                    "mtime": mtime,
-                    "width": meta.get("width") or 0,
-                    "height": meta.get("height") or 0,
-                }
-            )
+        items = [_library_item(root, p, tags_by_path.get(str(p), {})) for p in page]
         return JSONResponse(
             {
-                "meta": {"name": name, "root": str(root), "total": total,
-                         "offset": offset, "limit": limit, "filter": filter},
+                "meta": {
+                    "name": name,
+                    "root": str(root),
+                    "total": total,
+                    "library_total": len(all_files),
+                    "offset": offset,
+                    "limit": limit,
+                    "filter": filter,
+                },
                 "items": items,
             }
         )
@@ -815,5 +924,3 @@ def serve(host: str = "127.0.0.1", port: int = 7799, open_browser: bool = True) 
 
         threading.Timer(0.7, lambda: webbrowser.open(f"http://{host}:{port}/")).start()
     uvicorn.run(app, host=host, port=port, log_level="warning")
-
-

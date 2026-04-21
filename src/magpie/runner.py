@@ -193,5 +193,5 @@ def _write_csv(path: Path, rows: list[_Row]) -> None:
 
 def default_csv_path(now: datetime | None = None) -> Path:
     now = now or datetime.now()
-    stamp = now.strftime("%Y-%m-%dT%H-%M-%S")
+    stamp = now.strftime("%Y-%m-%dT%H-%M-%S-%f")
     return Path.home() / ".local" / "share" / "magpie" / "runs" / f"{stamp}.csv"

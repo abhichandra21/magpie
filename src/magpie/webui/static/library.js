@@ -252,7 +252,9 @@ async function runLibrary(force) {
   $("#lib-progress").hidden = false;
   $("#lib-run-status").textContent = "submitting…";
   try {
-    const { id } = await jpost("/api/jobs", { path: lib.path, force });
+    const payload = { path: lib.path, force };
+    if (!force) payload.filter = "untagged";
+    const { id } = await jpost("/api/jobs", payload);
     await pollLibraryJob(id);
   } catch (e) {
     $("#lib-run-status").textContent = `failed: ${e.message}`;

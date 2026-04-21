@@ -41,6 +41,7 @@ function setStatus(text, cls) {
 function addEndpointRow(prefill) {
   const tpl = $("#ep-row");
   const row = tpl.content.firstElementChild.cloneNode(true);
+  row.dataset.apiKeyDirty = "false";
   if (prefill) {
     row.querySelector(".name").value = prefill.name || "";
     row.querySelector(".url").value = prefill.url || "";
@@ -49,6 +50,9 @@ function addEndpointRow(prefill) {
       row.querySelector(".api_key").placeholder = "(unchanged · stored key in use)";
     }
   }
+  row.querySelector(".api_key").addEventListener("input", () => {
+    row.dataset.apiKeyDirty = "true";
+  });
   row.querySelector(".rm").addEventListener("click", () => {
     row.remove();
     syncDefaultOptions();
@@ -82,7 +86,7 @@ function readEndpoints() {
       url: row.querySelector(".url").value.trim(),
       model: row.querySelector(".model").value.trim(),
     };
-    if (apiKey) out.api_key = apiKey;
+    if (apiKey || row.dataset.apiKeyDirty === "true") out.api_key = apiKey;
     return out;
   });
 }
