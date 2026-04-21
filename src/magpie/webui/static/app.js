@@ -170,15 +170,13 @@ async function loadRunsSection() {
   } else {
     top.forEach((r) => {
       const tr = document.createElement("tr");
-      const failed = r.failed
-        ? `<span class="bad">${r.failed} <span style="color:var(--muted); font-style:normal;">failed</span></span>`
-        : "";
-      const skipped = r.skipped ? `${r.skipped} <span style="color:var(--muted); font-style:normal;">skipped</span>` : "";
-      const tagged = `<em>${r.tagged}</em><span style="color:var(--muted);">tagged</span>`;
+      const skipped = r.skipped ? `<span class="pill skip">${r.skipped} skipped</span>` : "";
+      const failed = r.failed ? `<span class="pill bad">${r.failed} failed</span>` : "";
+      const tagged = `<em>${r.tagged}</em><span style="color:var(--muted); font-size:0.7rem; letter-spacing:0.1em; text-transform:uppercase;">tagged</span>`;
       tr.innerHTML = `
         <td>${fmtTimestamp(r.timestamp)}</td>
         <td class="model">${(r.models && r.models.length) ? r.models.join(" · ") : "—"}</td>
-        <td class="counts">${tagged} ${skipped} ${failed}</td>
+        <td class="counts">${tagged}${skipped}${failed}</td>
         <td class="bar"><div class="track"><div class="fill" style="--pct:${Math.min(100, (100 * (r.total_ms || 0)) / maxMs)}%"></div></div></td>
       `;
       tbody.appendChild(tr);

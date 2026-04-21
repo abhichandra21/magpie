@@ -106,9 +106,13 @@ def _read_tags(paths: list[str], with_dims: bool = False) -> dict[str, dict]:
             h = m.get("File:ImageHeight") or 0
             orient = m.get("EXIF:Orientation") or 1
             try:
-                w = int(w); h = int(h); orient = int(orient)
+                w = int(w)
+                h = int(h)
+                orient = int(orient)
             except (TypeError, ValueError):
-                w = h = 0; orient = 1
+                w = 0
+                h = 0
+                orient = 1
             # orientations 5-8 swap w/h
             if orient in (5, 6, 7, 8):
                 w, h = h, w
@@ -525,6 +529,13 @@ def build_app(runs_dir: Path | None = None) -> FastAPI:
     @app.get("/api/config")
     def get_config() -> JSONResponse:
         cfg = _load_config()
+        libraries = []
+        for name, p in sorted(cfg.libraries.items()):
+            try:
+                exists = p.exists() and p.is_dir()
+            except OSError:
+                exists = False
+            libraries.append({"name": name, "path": str(p), "exists": exists})
         return JSONResponse(
             {
                 "default_endpoint": cfg.default_endpoint,
@@ -539,6 +550,7 @@ def build_app(runs_dir: Path | None = None) -> FastAPI:
                     }
                     for name, ep in sorted(cfg.endpoints.items())
                 ],
+                "libraries": libraries,
                 "config_path": str(DEFAULT_CONFIG_PATH),
             }
         )
@@ -636,9 +648,31 @@ def _write_config(payload: dict) -> None:
             f"default_endpoint {default_endpoint!r} is not one of the configured endpoints"
         )
 
+    libraries_payload = payload.get("libraries")
+    cleaned_libs: list[tuple[str, str]] | None = None
+    if libraries_payload is not None:
+        if not isinstance(libraries_payload, list):
+            raise ValueError("libraries must be a list")
+        seen: set[str] = set()
+        cleaned_libs = []
+        for lib in libraries_payload:
+            if not isinstance(lib, dict):
+                raise ValueError("each library must be an object")
+            lname = str(lib.get("name") or "").strip()
+            lpath = str(lib.get("path") or "").strip()
+            if not lname:
+                continue  # silently drop empty rows
+            if not lname.isidentifier():
+                raise ValueError(f"invalid library name: {lname!r}")
+            if lname in seen:
+                raise ValueError(f"duplicate library name: {lname}")
+            if not lpath:
+                raise ValueError(f"library {lname!r} requires a path")
+            seen.add(lname)
+            cleaned_libs.append((lname, lpath))
+
     path = DEFAULT_CONFIG_PATH
     existing_prompt = _read_prompt_block(path)
-    existing_libraries = _read_libraries_block(path)
     lines: list[str] = [
         f'default_endpoint = "{default_endpoint}"',
         f"max_keywords = {max_keywords}",
@@ -651,9 +685,17 @@ def _write_config(payload: dict) -> None:
         lines.append(f'model = "{_toml_escape(ep["model"])}"')
         lines.append(f'api_key = "{_toml_escape(ep["api_key"])}"')
         lines.append("")
-    if existing_libraries:
-        lines.append(existing_libraries)
-        lines.append("")
+    if cleaned_libs is not None:
+        if cleaned_libs:
+            lines.append("[libraries]")
+            for lname, lpath in cleaned_libs:
+                lines.append(f'{lname} = "{_toml_escape(lpath)}"')
+            lines.append("")
+    else:
+        existing_libraries = _read_libraries_block(path)
+        if existing_libraries:
+            lines.append(existing_libraries)
+            lines.append("")
     lines.append(existing_prompt)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("\n".join(lines).rstrip() + "\n")

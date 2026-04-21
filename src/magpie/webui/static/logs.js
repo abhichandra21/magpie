@@ -35,13 +35,22 @@ function append(line) {
   const li = document.createElement("li");
   const lvl = (line.level || "INFO").toUpperCase();
   li.dataset.level = lvl;
+  li.dataset.logger = line.logger || "";
+  li.title = `${line.logger || ""}  —  click to copy`;
   li.dataset.text = `${line.logger} ${line.message}`.toLowerCase();
+  li.dataset.copy = `${fmtTs(line.ts)}  ${lvl}  ${line.logger || ""}  ${line.message || ""}`;
   li.innerHTML = `
     <span class="ts">${fmtTs(line.ts)}</span>
     <span class="lvl ${lvl}">${lvl}</span>
-    <span class="lgr">${escapeHtml(line.logger || "")}</span>
     <span class="msg">${escapeHtml(line.message || "")}</span>
   `;
+  li.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(li.dataset.copy);
+      li.classList.add("copied");
+      setTimeout(() => li.classList.remove("copied"), 600);
+    } catch { /* noop */ }
+  });
   applyFilter(li);
   $("#lines").appendChild(li);
   state.count += 1;

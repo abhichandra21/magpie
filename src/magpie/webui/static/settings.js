@@ -1,4 +1,5 @@
-// magpie webui — settings page.
+// magpie webui — settings page (defaults / endpoints / libraries).
+import { mountPicker } from "/static/picker.js";
 
 const $ = (s, r = document) => r.querySelector(s);
 
@@ -7,14 +8,23 @@ async function jget(url) {
   if (!r.ok) throw new Error(await r.text());
   return r.json();
 }
+async function jpost(url, body) {
+  const r = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body || {}),
+  });
+  const t = await r.text(); const j = t ? JSON.parse(t) : {};
+  if (!r.ok) throw new Error(j.detail || r.statusText);
+  return j;
+}
 async function jput(url, body) {
   const r = await fetch(url, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  const text = await r.text();
-  const j = text ? JSON.parse(text) : {};
+  const t = await r.text(); const j = t ? JSON.parse(t) : {};
   if (!r.ok) throw new Error(j.detail || r.statusText);
   return j;
 }
@@ -25,6 +35,8 @@ function setStatus(text, cls) {
   el.classList.remove("ok", "err");
   if (cls) el.classList.add(cls);
 }
+
+// ---------- endpoints ----------
 
 function addEndpointRow(prefill) {
   const tpl = $("#ep-row");
@@ -49,9 +61,8 @@ function addEndpointRow(prefill) {
 function syncDefaultOptions() {
   const sel = $("#default_endpoint");
   const wanted = sel.value;
-  const names = [...$("#endpoints").querySelectorAll(".name")]
-    .map((i) => i.value.trim())
-    .filter(Boolean);
+  const names = [...$("#endpoints").querySelectorAll(".ep-row .name")]
+    .map((i) => i.value.trim()).filter(Boolean);
   sel.innerHTML = "";
   names.forEach((n) => {
     const o = document.createElement("option");
@@ -62,20 +73,86 @@ function syncDefaultOptions() {
   if (!names.includes(wanted) && names.length) sel.value = names[0];
 }
 
-function readEndpoints(existingKeyMap) {
-  const rows = [...$("#endpoints").querySelectorAll(".endpoint-row")];
-  return rows.map((row) => {
+function readEndpoints() {
+  return [...$("#endpoints").querySelectorAll(".ep-row")].map((row) => {
     const name = row.querySelector(".name").value.trim();
     const apiKey = row.querySelector(".api_key").value;
-    return {
+    const out = {
       name,
       url: row.querySelector(".url").value.trim(),
       model: row.querySelector(".model").value.trim(),
-      // empty input keeps existing key (no overwrite). Only send when user typed.
-      api_key: apiKey || (existingKeyMap[name] ? "__KEEP__" : ""),
     };
+    if (apiKey) out.api_key = apiKey;
+    return out;
   });
 }
+
+// ---------- libraries ----------
+
+function addLibraryRow(prefill) {
+  const tpl = $("#lib-row");
+  const row = tpl.content.firstElementChild.cloneNode(true);
+  const name = row.querySelector(".name");
+  const path = row.querySelector(".path");
+  const status = row.querySelector(".path-status");
+  const pickerHost = row.querySelector(".lib-picker");
+
+  if (prefill) {
+    name.value = prefill.name || "";
+    path.value = prefill.path || "";
+    if (prefill.exists === false) {
+      status.textContent = "path missing on disk";
+      status.classList.add("err");
+    } else if (prefill.exists === true) {
+      status.textContent = "ok";
+      status.classList.add("ok");
+    }
+  }
+
+  let timer;
+  const validate = async () => {
+    const v = path.value.trim();
+    if (!v) { status.textContent = ""; status.classList.remove("ok", "err"); return; }
+    try {
+      const r = await jpost("/api/validate", { path: v });
+      status.classList.remove("ok", "err");
+      if (!r.exists) { status.textContent = r.error || "does not exist"; status.classList.add("err"); return; }
+      if (r.kind !== "dir") { status.textContent = "must be a folder"; status.classList.add("err"); return; }
+      status.textContent = `${r.images} photo${r.images === 1 ? "" : "s"} inside`;
+      status.classList.add("ok");
+    } catch (e) {
+      status.textContent = e.message;
+      status.classList.add("err");
+    }
+  };
+  path.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(validate, 250); });
+
+  let pickerOpen = false;
+  row.querySelector(".browse").addEventListener("click", async () => {
+    if (pickerOpen) { pickerHost.replaceChildren(); pickerOpen = false; return; }
+    pickerOpen = true;
+    await mountPicker(pickerHost, {
+      startPath: path.value.trim(),
+      onPick: (p) => { path.value = p; pickerHost.replaceChildren(); pickerOpen = false; validate(); },
+      onClose: () => { pickerHost.replaceChildren(); pickerOpen = false; },
+    });
+  });
+
+  row.querySelector(".rm").addEventListener("click", () => row.remove());
+  $("#libraries").appendChild(row);
+  if (prefill && prefill.path) validate();
+}
+
+function readLibraries() {
+  return [...$("#libraries").querySelectorAll(".lib-row")]
+    .map((row) => ({
+      name: row.querySelector(".name").value.trim(),
+      path: row.querySelector(".path").value.trim(),
+    }))
+    .filter((l) => l.name || l.path);
+}
+
+// ---------- load + save ----------
 
 async function load() {
   setStatus("loading…");
@@ -88,32 +165,23 @@ async function load() {
     cfg.endpoints.forEach(addEndpointRow);
     syncDefaultOptions();
     $("#default_endpoint").value = cfg.default_endpoint;
+    $("#libraries").innerHTML = "";
+    (cfg.libraries || []).forEach(addLibraryRow);
     setStatus("loaded · " + cfg.config_path, "ok");
   } catch (e) {
     setStatus(`load failed: ${e.message}`, "err");
   }
 }
 
-async function save() {
+async function save(ev) {
+  ev?.preventDefault?.();
   setStatus("saving…");
-  // build endpoints, preserving existing api_key when input was left blank.
-  let cur;
-  try { cur = await jget("/api/config"); } catch { cur = { endpoints: [] }; }
-  const keyMap = Object.fromEntries(cur.endpoints.map((e) => [e.name, e.has_api_key]));
-  const endpoints = readEndpoints(keyMap);
-
-  // Translate __KEEP__ marker by fetching nothing — server has no GET-key path,
-  // so we emit an empty string and rely on the user to retype if they rotated.
-  // To preserve, we simply omit the api_key field when value is __KEEP__.
-  const cleaned = endpoints.map(({ api_key, ...rest }) =>
-    api_key === "__KEEP__" ? rest : { ...rest, api_key }
-  );
-
   const body = {
     default_endpoint: $("#default_endpoint").value,
     max_keywords: parseInt($("#max_keywords").value, 10),
     concurrency: parseInt($("#concurrency").value, 10),
-    endpoints: cleaned,
+    endpoints: readEndpoints(),
+    libraries: readLibraries(),
   };
   try {
     await jput("/api/config", body);
@@ -124,13 +192,10 @@ async function save() {
   }
 }
 
-function bind() {
-  $("#cfg-form").addEventListener("submit", (e) => { e.preventDefault(); save(); });
+(function init() {
+  $("#cfg-form").addEventListener("submit", save);
   $("#reload").addEventListener("click", load);
   $("#add-ep").addEventListener("click", () => addEndpointRow());
-}
-
-(async function init() {
-  bind();
-  await load();
+  $("#add-lib").addEventListener("click", () => addLibraryRow());
+  load();
 })();
