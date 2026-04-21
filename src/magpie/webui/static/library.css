@@ -45,28 +45,7 @@
 }
 .lib-chip.active .count { color: rgba(255,255,255,0.85); }
 
-.lib-filter {
-  display: flex; gap: 0.2rem;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  padding: 3px;
-  background: var(--surface);
-}
-.fbtn {
-  background: transparent;
-  border: none;
-  padding: 0.35rem 0.85rem;
-  border-radius: 999px;
-  font-family: var(--mono);
-  font-size: 0.66rem;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--muted);
-  cursor: pointer;
-  transition: background 0.15s, color 0.15s;
-}
-.fbtn:hover { color: var(--text); }
-.fbtn.active { background: var(--surface2); color: var(--text); }
+/* .lib-filter and .fbtn moved to style.css (shared by /library and /logs) */
 
 .library-meta {
   font-family: var(--mono);

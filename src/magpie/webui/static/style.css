@@ -824,6 +824,43 @@ footer .sep { color: var(--border); }
 .settings-actions .btn-primary { padding: 0.78rem 1.4rem; }
 
 /* ============================================================
+   Shared filter pill group (used on /library and /logs)
+   ============================================================ */
+.lib-filter {
+  display: inline-flex;
+  gap: 2px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 3px;
+  background: var(--surface);
+}
+.fbtn {
+  background: transparent;
+  border: none;
+  padding: 0.4rem 0.95rem;
+  border-radius: 999px;
+  font-family: var(--mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, box-shadow 0.15s;
+  line-height: 1;
+}
+.fbtn:hover { color: var(--text); }
+.fbtn.active {
+  background: var(--surface2);
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.06);
+}
+
+/* Level-tinted active states for the logs filter */
+.logs-levels .fbtn[data-level="INFO"].active   { color: var(--iri-b); }
+.logs-levels .fbtn[data-level="WARNING"].active{ color: var(--accent2); }
+.logs-levels .fbtn[data-level="ERROR"].active  { color: var(--bad); }
+
+/* ============================================================
    Logs page — better message column, hover line, copy
    ============================================================ */
 .logs-pane {
