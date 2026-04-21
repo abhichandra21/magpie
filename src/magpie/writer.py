@@ -65,6 +65,9 @@ class MetadataWriter:
             "XMP:CreatorTool": f"magpie/{model_id}",
         }
         try:
-            self._helper().set_tags(str(path), tags=tags)
+            # -P preserves the file's mtime/atime through the rewrite so
+            # photo-management tools that sort by disk date stay stable.
+            # An exiftool _original backup is still created alongside.
+            self._helper().set_tags(str(path), tags=tags, params=["-P"])
         except exiftool.exceptions.ExifToolExecuteError as exc:
             raise WriterError(f"exiftool write failed for {path}: {exc}") from exc
