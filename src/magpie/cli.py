@@ -130,6 +130,22 @@ def watch(
         typer.echo("shutting down", err=True)
 
 
+@app.command("ui")
+def ui_cmd(
+    port: Annotated[int, typer.Option(help="HTTP port (auto-retries if busy).")] = 7799,
+    host: Annotated[str, typer.Option(help="Host to bind.")] = "127.0.0.1",
+    open_browser: Annotated[
+        bool,
+        typer.Option("--open/--no-open", help="Open the UI in a browser."),
+    ] = True,
+) -> None:
+    """Serve the local web dashboard — a cabinet of captioned things."""
+    from magpie.webui import serve
+
+    typer.echo(f"magpie · starting ui at http://{host}:{port}/")
+    serve(host=host, port=port, open_browser=open_browser)
+
+
 @app.command("config")
 def config_cmd(
     config_path: Annotated[

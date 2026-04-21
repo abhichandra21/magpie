@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>magpie · settings</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&family=Newsreader:ital,opsz,wght@0,6..72,300..700;1,6..72,300..700&family=Public+Sans:ital,wght@0,300..700;1,300..700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <nav>
+    <a class="nav-brand" href="/">
+      <svg viewBox="0 0 200 120" aria-hidden="true">
+        <defs><linearGradient id="wing2" x1="0" y1="0" x2="1" y2="0.6">
+          <stop offset="0" stop-color="#2fbf9b"/><stop offset="0.55" stop-color="#48c9d6"/><stop offset="1" stop-color="#8a5cf2"/>
+        </linearGradient></defs>
+        <path d="M118,60 Q170,45 194,55 Q168,62 130,70 Z" fill="#0f0c14"/>
+        <ellipse cx="88" cy="62" rx="38" ry="18" fill="#0f0c14"/>
+        <ellipse cx="80" cy="70" rx="22" ry="9" fill="#f0ecf5" opacity="0.92"/>
+        <path d="M92,50 Q110,40 124,58 Q110,66 88,62 Z" fill="url(#wing2)"/>
+        <circle cx="52" cy="52" r="14" fill="#0f0c14"/>
+        <path d="M40,52 L24,48 L40,58 Z" fill="#0f0c14"/>
+        <circle cx="50" cy="49" r="2" fill="#f0ecf5"/>
+      </svg>
+      <span class="nav-brand-word">mag<em>pie</em></span>
+    </a>
+    <div class="nav-group">
+      <a class="nav-link" href="/">Tag</a>
+      <a class="nav-link" href="/library">Library</a>
+      <a class="nav-link" href="/logs">Logs</a>
+      <a class="nav-link active" href="/settings">Settings</a>
+    </div>
+    <div class="nav-system">
+      <a class="nav-link" href="https://github.com/abhichandra21/magpie" target="_blank" rel="noopener">GitHub</a>
+    </div>
+  </nav>
+
+  <main class="settings-main">
+    <div class="settings-head">
+      <h1>Settings</h1>
+      <p>Edit the basics of your config. The prompt block stays untouched.</p>
+      <p class="path-line"><span class="mono" id="cfg-path">~/.config/magpie/config.toml</span></p>
+    </div>
+
+    <form id="cfg-form" autocomplete="off">
+
+      <!-- Defaults -->
+      <section class="card">
+        <header class="card-head">
+          <span class="card-step">01</span>
+          <h2>Defaults</h2>
+          <span class="card-rule"></span>
+          <span class="card-kind">global</span>
+        </header>
+        <div class="card-body grid-3">
+          <label class="field">
+            <span>Default endpoint</span>
+            <select class="input-field" id="default_endpoint"></select>
+          </label>
+          <label class="field">
+            <span>Max keywords</span>
+            <input class="input-field" id="max_keywords" type="number" min="1" max="200" required>
+          </label>
+          <label class="field">
+            <span>Concurrency</span>
+            <input class="input-field" id="concurrency" type="number" min="1" max="32" required>
+          </label>
+        </div>
+      </section>
+
+      <!-- Endpoints -->
+      <section class="card">
+        <header class="card-head">
+          <span class="card-step">02</span>
+          <h2>Endpoints</h2>
+          <span class="card-rule"></span>
+          <span class="card-kind">openai-compatible · /v1/chat/completions</span>
+        </header>
+        <div class="card-body" id="endpoints"></div>
+        <footer class="card-foot">
+          <button type="button" class="btn-ghost" id="add-ep">+ Add endpoint</button>
+        </footer>
+      </section>
+
+      <!-- Libraries -->
+      <section class="card">
+        <header class="card-head">
+          <span class="card-step">03</span>
+          <h2>Libraries</h2>
+          <span class="card-rule"></span>
+          <span class="card-kind">photo folders for the library browser</span>
+        </header>
+        <div class="card-body" id="libraries"></div>
+        <footer class="card-foot">
+          <button type="button" class="btn-ghost" id="add-lib">+ Add library</button>
+        </footer>
+      </section>
+
+      <div class="settings-actions">
+        <button type="submit" class="btn-primary" id="save">Save changes</button>
+        <button type="button" class="btn-ghost" id="reload">Discard &amp; reload</button>
+        <span class="settings-status" id="status"></span>
+      </div>
+    </form>
+  </main>
+
+  <footer>
+    <span class="mono">Pica pica · local-only</span>
+    <span class="sep">·</span>
+    <a href="/" class="mono" style="color:var(--muted); text-decoration:none;">back to tag</a>
+  </footer>
+
+  <template id="ep-row">
+    <div class="ep-row">
+      <div class="ep-row-head">
+        <label class="field name-field">
+          <span>Name</span>
+          <input class="input-field name" type="text" placeholder="mac" required>
+        </label>
+        <button type="button" class="rm" title="remove">×</button>
+      </div>
+      <div class="ep-row-grid">
+        <label class="field span-2">
+          <span>URL</span>
+          <input class="input-field url" type="text" placeholder="http://localhost:11434/v1" required>
+        </label>
+        <label class="field">
+          <span>Model</span>
+          <input class="input-field model" type="text" placeholder="gemma4:26b-a4b-it-q4_K_M" required>
+        </label>
+        <label class="field">
+          <span>API key <i>— optional</i></span>
+          <input class="input-field api_key" type="password" placeholder="leave blank for none">
+        </label>
+      </div>
+    </div>
+  </template>
+
+  <template id="lib-row">
+    <div class="lib-row">
+      <label class="field">
+        <span>Name</span>
+        <input class="input-field name" type="text" placeholder="pictures" required>
+      </label>
+      <label class="field path-field">
+        <span>Path</span>
+        <div class="path-input-row">
+          <input class="input-field path" type="text" placeholder="~/Pictures" required>
+          <button type="button" class="btn-browse browse">Browse</button>
+        </div>
+        <div class="path-status"></div>
+      </label>
+      <button type="button" class="rm" title="remove">×</button>
+      <div class="lib-picker"></div>
+    </div>
+  </template>
+
+  <script src="/static/settings.js" type="module"></script>
+</body>
+</html>

@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>magpie</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&family=Newsreader:ital,opsz,wght@0,6..72,300..700;1,6..72,300..700&family=Public+Sans:ital,wght@0,300..700;1,300..700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="icon" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><circle cx='8' cy='8' r='7' fill='%230f0c14'/><circle cx='8' cy='8' r='2.5' fill='%23e39462'/></svg>">
+</head>
+<body>
+  <nav>
+    <a class="nav-brand" href="/">
+      <svg viewBox="0 0 200 120" aria-hidden="true">
+        <defs>
+          <linearGradient id="wing" x1="0" y1="0" x2="1" y2="0.6">
+            <stop offset="0" stop-color="#2fbf9b"/>
+            <stop offset="0.55" stop-color="#48c9d6"/>
+            <stop offset="1" stop-color="#8a5cf2"/>
+          </linearGradient>
+        </defs>
+        <path d="M118,60 Q170,45 194,55 Q168,62 130,70 Z" fill="#0f0c14"/>
+        <ellipse cx="88" cy="62" rx="38" ry="18" fill="#0f0c14"/>
+        <ellipse cx="80" cy="70" rx="22" ry="9" fill="#f0ecf5" opacity="0.92"/>
+        <path d="M92,50 Q110,40 124,58 Q110,66 88,62 Z" fill="url(#wing)"/>
+        <circle cx="52" cy="52" r="14" fill="#0f0c14"/>
+        <path d="M40,52 L24,48 L40,58 Z" fill="#0f0c14"/>
+        <circle cx="50" cy="49" r="2" fill="#f0ecf5"/>
+      </svg>
+      <span class="nav-brand-word">mag<em>pie</em></span>
+    </a>
+    <div class="nav-group">
+      <a class="nav-link active" href="/">Tag</a>
+      <a class="nav-link" href="/library">Library</a>
+      <a class="nav-link" href="/logs">Logs</a>
+      <a class="nav-link" href="/settings">Settings</a>
+    </div>
+    <div class="nav-system">
+      <a class="nav-link" href="https://github.com/abhichandra21/magpie" target="_blank" rel="noopener">GitHub</a>
+    </div>
+  </nav>
+
+  <main>
+    <section class="hero">
+      <h1>What would you like<br>to <span class="accent">tag</span>?</h1>
+      <p class="sub">Drop in a folder or single photo. magpie writes captions and keywords directly into the file via your local vision model.</p>
+
+      <form id="run-form" autocomplete="off">
+        <div class="path-row">
+          <input class="input-field" id="path" name="path" type="text"
+                 placeholder="~/Pictures/some-folder  or  /absolute/path/photo.jpg"
+                 spellcheck="false" required>
+          <button type="button" class="btn-browse" id="browse">Browse</button>
+          <button type="submit" class="btn-tag" id="go">Tag it</button>
+        </div>
+        <div class="path-hint" id="path-hint">paste a path, or browse — magpie will recurse into folders</div>
+        <div id="picker-host"></div>
+
+        <div class="opts">
+          <label>
+            <span>Endpoint</span>
+            <select class="input-field" id="endpoint"></select>
+          </label>
+          <label>
+            <span>Hint <i style="color:var(--muted); font-style: italic;">— optional</i></span>
+            <input class="input-field" id="hint" type="text" placeholder="e.g. trip to Taos, holiday photos">
+          </label>
+          <label class="switch switch-inline" for="force" title="ignore magpie/ CreatorTool marker">
+            <input type="checkbox" id="force">
+            <span class="track" aria-hidden="true"><span class="thumb"></span></span>
+            <span class="switch-label">Force re-tag</span>
+          </label>
+        </div>
+      </form>
+    </section>
+
+    <section id="progress" hidden>
+      <div class="section-label">
+        <span>In flight</span>
+        <span class="rule"></span>
+        <span class="right" id="run-status">—</span>
+      </div>
+      <div class="progress-card">
+        <div class="meter"><div class="fill" id="meter-fill"></div></div>
+        <div class="row">
+          <span><em id="p-done">0</em><i> / </i><em id="p-total">?</em> photographs</span>
+          <span class="breakdown">
+            <span class="good">tagged <em id="p-tagged">0</em></span>
+            <span>skipped <em id="p-skipped">0</em></span>
+            <span class="bad">failed <em id="p-failed">0</em></span>
+          </span>
+        </div>
+        <div class="current" id="p-current">—</div>
+        <ul class="log" id="p-log"></ul>
+      </div>
+    </section>
+
+    <section id="recent">
+      <div class="section-label">
+        <span>Recent runs</span>
+        <span class="rule"></span>
+        <span class="right" id="stat-summary">—</span>
+      </div>
+      <table class="runs-table" id="runs-table">
+        <thead>
+          <tr>
+            <th>When</th>
+            <th>Model</th>
+            <th>Tagged · Skipped · Failed</th>
+            <th>Duration</th>
+          </tr>
+        </thead>
+        <tbody id="runs-tbody"></tbody>
+      </table>
+    </section>
+
+    <section id="cabinet">
+      <div class="section-label">
+        <span>Latest specimens</span>
+        <span class="rule"></span>
+        <span class="right" id="cabinet-meta">—</span>
+      </div>
+      <div class="cabinet-strip" id="shelves"></div>
+    </section>
+  </main>
+
+  <footer>
+    <span class="mono">Pica pica · local-only</span>
+    <span class="sep">·</span>
+    <span class="mono" id="footer-csv">runs at ~/.local/share/magpie/runs</span>
+  </footer>
+
+  <template id="card">
+    <article class="card">
+      <img alt="" loading="lazy" decoding="async">
+      <div class="body">
+        <div class="cap"></div>
+        <div class="kws"></div>
+      </div>
+    </article>
+  </template>
+
+  <script src="/static/app.js" type="module"></script>
+</body>
+</html>

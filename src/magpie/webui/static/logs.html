@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>magpie · logs</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Newsreader:ital,opsz,wght@0,6..72,300..700;1,6..72,300..700&family=Public+Sans:ital,wght@0,300..700;1,300..700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/logs.css">
+</head>
+<body>
+  <nav>
+    <a class="nav-brand" href="/">
+      <svg viewBox="0 0 200 120" aria-hidden="true">
+        <defs><linearGradient id="wingG" x1="0" y1="0" x2="1" y2="0.6">
+          <stop offset="0" stop-color="#2fbf9b"/><stop offset="0.55" stop-color="#48c9d6"/><stop offset="1" stop-color="#8a5cf2"/>
+        </linearGradient></defs>
+        <path d="M118,60 Q170,45 194,55 Q168,62 130,70 Z" fill="#0f0c14"/>
+        <ellipse cx="88" cy="62" rx="38" ry="18" fill="#0f0c14"/>
+        <ellipse cx="80" cy="70" rx="22" ry="9" fill="#f0ecf5" opacity="0.92"/>
+        <path d="M92,50 Q110,40 124,58 Q110,66 88,62 Z" fill="url(#wingG)"/>
+        <circle cx="52" cy="52" r="14" fill="#0f0c14"/>
+        <path d="M40,52 L24,48 L40,58 Z" fill="#0f0c14"/>
+        <circle cx="50" cy="49" r="2" fill="#f0ecf5"/>
+      </svg>
+      <span class="nav-brand-word">mag<em>pie</em></span>
+    </a>
+    <div class="nav-group">
+      <a class="nav-link" href="/">Tag</a>
+      <a class="nav-link" href="/library">Library</a>
+      <a class="nav-link active" href="/logs">Logs</a>
+      <a class="nav-link" href="/settings">Settings</a>
+    </div>
+    <div class="nav-system">
+      <a class="nav-link" href="https://github.com/abhichandra21/magpie" target="_blank" rel="noopener">GitHub</a>
+    </div>
+  </nav>
+
+  <main class="logs-main">
+    <header class="logs-head">
+      <h1>Logs</h1>
+      <p class="sub">Live tail of the local server. Use the filter to focus on a level; toggle auto-scroll if you need to read.</p>
+    </header>
+
+    <div class="logs-toolbar">
+      <div class="lib-filter logs-levels" id="levels">
+        <button class="fbtn active" type="button" data-level="all">All</button>
+        <button class="fbtn" type="button" data-level="INFO">Info</button>
+        <button class="fbtn" type="button" data-level="WARNING">Warn</button>
+        <button class="fbtn" type="button" data-level="ERROR">Error</button>
+      </div>
+      <input type="search" id="search" class="input-field logs-search" placeholder="filter…  e.g. uvicorn or tagged" spellcheck="false">
+      <label class="switch" for="autoscroll" title="auto-scroll">
+        <input type="checkbox" id="autoscroll" checked>
+        <span class="track" aria-hidden="true"><span class="thumb"></span></span>
+        <span class="switch-label">auto-scroll</span>
+      </label>
+      <button class="btn-ghost" type="button" id="clear">Clear view</button>
+    </div>
+
+    <div class="logs-status" id="status">connecting…</div>
+
+    <div class="logs-pane" id="pane">
+      <ol class="lines" id="lines"></ol>
+    </div>
+  </main>
+
+  <footer>
+    <span class="mono">Pica pica · local-only</span>
+    <span class="sep">·</span>
+    <span class="mono" id="line-count" style="color:var(--muted);">0 lines</span>
+  </footer>
+
+  <script type="module" src="/static/logs.js"></script>
+</body>
+</html>

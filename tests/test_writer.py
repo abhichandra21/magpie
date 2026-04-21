@@ -83,6 +83,24 @@ def test_write_then_already_tagged_true(writer, untagged_copy):
     assert writer.already_tagged(untagged_copy) is True
 
 
+def test_write_preserves_file_mtime(writer, untagged_copy):
+    import os
+    import time
+
+    # Back-date the test fixture so we can detect a rewrite touching mtime.
+    past = time.time() - 7 * 24 * 3600  # one week ago
+    os.utime(untagged_copy, (past, past))
+    before = untagged_copy.stat().st_mtime
+
+    writer.write(
+        untagged_copy, TagResult(caption="c", keywords=["k"]), model_id="m"
+    )
+    after = untagged_copy.stat().st_mtime
+
+    # allow a 1-second fudge for filesystem mtime resolution
+    assert abs(after - before) < 1, f"mtime changed from {before} to {after}"
+
+
 def test_write_raises_on_missing_file(writer, tmp_path):
     missing = tmp_path / "nope.jpg"
     with pytest.raises(WriterError):
