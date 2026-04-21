@@ -9,6 +9,17 @@ async function jget(url) {
   return r.json();
 }
 
+async function jpost(url, body) {
+  const r = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body || {}),
+  });
+  const t = await r.text(); const j = t ? JSON.parse(t) : {};
+  if (!r.ok) throw new Error(j.detail || r.statusText);
+  return j;
+}
+
 function bytes(n) {
   if (!n && n !== 0) return "";
   if (n < 1024) return `${n} B`;
@@ -94,6 +105,10 @@ function paintChips() {
   $(".lib-filter").querySelectorAll(".fbtn").forEach((el) => {
     el.classList.toggle("active", el.dataset.filter === state.filter);
   });
+  const selected = state.libraries.find((l) => l.name === state.library);
+  const disabled = !(selected && selected.exists && selected.count > 0);
+  $("#run-untagged").disabled = disabled;
+  $("#run-all").disabled = disabled;
 }
 
 async function loadPage(reset) {
@@ -219,10 +234,95 @@ function bindFilters() {
     loadPage(true);
   });
   $("#load-more-btn").addEventListener("click", () => loadPage(false));
+  $("#run-untagged").addEventListener("click", () => runLibrary(false));
+  $("#run-all").addEventListener("click", () => {
+    const sel = state.libraries.find((l) => l.name === state.library);
+    const n = sel ? sel.count : 0;
+    const msg = `Re-tag ${n} photo${n === 1 ? "" : "s"} in "${state.library}"?\n\n`
+      + "This will call the vision model for every image, including already-tagged ones.";
+    if (confirm(msg)) runLibrary(true);
+  });
+}
+
+async function runLibrary(force) {
+  const lib = state.libraries.find((l) => l.name === state.library);
+  if (!lib || !lib.exists) return;
+  $("#run-untagged").disabled = true;
+  $("#run-all").disabled = true;
+  $("#lib-progress").hidden = false;
+  $("#lib-run-status").textContent = "submitting…";
+  try {
+    const { id } = await jpost("/api/jobs", { path: lib.path, force });
+    await pollLibraryJob(id);
+  } catch (e) {
+    $("#lib-run-status").textContent = `failed: ${e.message}`;
+  } finally {
+    paintChips(); // re-enable buttons
+  }
+}
+
+function paintProgress(job) {
+  const total = job.total || 1;
+  const done = (job.tagged || 0) + (job.skipped || 0) + (job.failed || 0);
+  const pct = total > 0 ? Math.min(100, (100 * done) / total) : 0;
+  $("#lib-meter").style.width = `${pct}%`;
+  $("#lib-done").textContent = done;
+  $("#lib-total").textContent = job.total || "?";
+  $("#lib-tagged").textContent = job.tagged || 0;
+  $("#lib-skipped").textContent = job.skipped || 0;
+  $("#lib-failed").textContent = job.failed || 0;
+  $("#lib-current").textContent = job.current || "—";
+}
+
+async function pollLibraryJob(jobId) {
+  const statusEl = $("#lib-run-status");
+  while (true) {
+    let job;
+    try { job = await jget(`/api/jobs/${jobId}`); }
+    catch (e) { statusEl.textContent = `lost: ${e.message}`; return; }
+    paintProgress(job);
+    if (job.status === "running" || job.status === "queued") {
+      const cur = job.current ? job.current.split("/").pop() : "";
+      statusEl.textContent = `${job.status}${cur ? " · " + cur : ""}`;
+      await new Promise((r) => setTimeout(r, 800));
+      continue;
+    }
+    if (job.status === "failed") {
+      statusEl.textContent = `failed: ${job.error || `${job.failed} file(s) failed`}`;
+    } else {
+      statusEl.textContent =
+        `done · ${job.tagged} tagged` +
+        (job.skipped ? ` · ${job.skipped} skipped` : "") +
+        (job.failed ? ` · ${job.failed} failed` : "");
+    }
+    // refresh the gallery to reflect newly-tagged state
+    await loadLibraries();
+    await loadPage(true);
+    return;
+  }
+}
+
+async function resumeActiveJob() {
+  try {
+    const jobs = await jget("/api/jobs");
+    const sel = state.libraries.find((l) => l.name === state.library);
+    if (!sel) return;
+    const active = jobs.find(
+      (j) => (j.status === "running" || j.status === "queued") && j.path === sel.path
+    );
+    if (active) {
+      $("#lib-progress").hidden = false;
+      $("#run-untagged").disabled = true;
+      $("#run-all").disabled = true;
+      paintProgress(active);
+      pollLibraryJob(active.id);
+    }
+  } catch { /* noop */ }
 }
 
 (async function init() {
   loadStateFromUrl();
   bindFilters();
   await loadLibraries();
+  await resumeActiveJob();
 })();

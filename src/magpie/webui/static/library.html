@@ -54,7 +54,34 @@
       </div>
     </div>
 
-    <div class="library-meta" id="library-meta">no library selected</div>
+    <div class="library-actions">
+      <div class="library-meta" id="library-meta">no library selected</div>
+      <div class="lib-run">
+        <button type="button" class="btn-primary" id="run-untagged" disabled>Tag untagged</button>
+        <button type="button" class="btn-ghost" id="run-all" disabled
+                title="ignore the magpie/ marker and re-tag every photo">Re-tag all</button>
+      </div>
+    </div>
+
+    <section class="lib-progress" id="lib-progress" hidden>
+      <div class="section-label">
+        <span>In flight</span>
+        <span class="rule"></span>
+        <span class="right" id="lib-run-status">—</span>
+      </div>
+      <div class="progress-card">
+        <div class="meter"><div class="fill" id="lib-meter"></div></div>
+        <div class="row">
+          <span><em id="lib-done">0</em><i> / </i><em id="lib-total">?</em> photographs</span>
+          <span class="breakdown">
+            <span class="good">tagged <em id="lib-tagged">0</em></span>
+            <span>skipped <em id="lib-skipped">0</em></span>
+            <span class="bad">failed <em id="lib-failed">0</em></span>
+          </span>
+        </div>
+        <div class="current" id="lib-current">—</div>
+      </div>
+    </section>
 
     <div class="pswp-gallery gallery" id="gallery"></div>
 

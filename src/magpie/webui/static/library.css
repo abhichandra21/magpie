@@ -47,13 +47,30 @@
 
 /* .lib-filter and .fbtn moved to style.css (shared by /library and /logs) */
 
+.library-actions {
+  display: flex; align-items: center; gap: 1rem;
+  margin-bottom: 1.2rem;
+  flex-wrap: wrap;
+}
 .library-meta {
   font-family: var(--mono);
   font-size: 0.7rem;
   letter-spacing: 0.06em;
   color: var(--muted);
-  margin-bottom: 1.2rem;
+  flex: 1;
 }
+.lib-run { display: flex; gap: 0.5rem; flex-shrink: 0; }
+.lib-run .btn-primary { padding: 0.55rem 0.95rem; font-size: 0.7rem; }
+.lib-run .btn-ghost { padding: 0.5rem 0.9rem; font-size: 0.66rem; }
+.lib-run .btn-primary:disabled, .lib-run .btn-ghost:disabled {
+  opacity: 0.5; cursor: not-allowed;
+}
+
+.lib-progress { margin-bottom: 1.6rem; }
+.lib-progress .section-label { margin-bottom: 0.6rem; }
+.lib-progress .progress-card { padding: 0.95rem 1.1rem; }
+.lib-progress .meter { height: 5px; margin-bottom: 0.7rem; }
+.lib-progress .current { font-size: 0.72rem; margin: 0.5rem 0 0; }
 
 .gallery {
   display: grid;
