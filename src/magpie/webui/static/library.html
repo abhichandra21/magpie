@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>magpie · library</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&family=Newsreader:ital,opsz,wght@0,6..72,300..700;1,6..72,300..700&family=Public+Sans:ital,wght@0,300..700;1,300..700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="https://unpkg.com/photoswipe@5/dist/photoswipe.css">
+  <link rel="stylesheet" href="/static/library.css">
+</head>
+<body>
+  <nav>
+    <a class="nav-brand" href="/">
+      <svg viewBox="0 0 200 120" aria-hidden="true">
+        <defs><linearGradient id="wingL" x1="0" y1="0" x2="1" y2="0.6">
+          <stop offset="0" stop-color="#2fbf9b"/><stop offset="0.55" stop-color="#48c9d6"/><stop offset="1" stop-color="#8a5cf2"/>
+        </linearGradient></defs>
+        <path d="M118,60 Q170,45 194,55 Q168,62 130,70 Z" fill="#0f0c14"/>
+        <ellipse cx="88" cy="62" rx="38" ry="18" fill="#0f0c14"/>
+        <ellipse cx="80" cy="70" rx="22" ry="9" fill="#f0ecf5" opacity="0.92"/>
+        <path d="M92,50 Q110,40 124,58 Q110,66 88,62 Z" fill="url(#wingL)"/>
+        <circle cx="52" cy="52" r="14" fill="#0f0c14"/>
+        <path d="M40,52 L24,48 L40,58 Z" fill="#0f0c14"/>
+        <circle cx="50" cy="49" r="2" fill="#f0ecf5"/>
+      </svg>
+      <span class="nav-brand-word">mag<em>pie</em></span>
+    </a>
+    <div class="nav-group">
+      <a class="nav-link" href="/">Tag</a>
+      <a class="nav-link active" href="/library">Library</a>
+      <a class="nav-link" href="/logs">Logs</a>
+      <a class="nav-link" href="/settings">Settings</a>
+    </div>
+    <div class="nav-system">
+      <a class="nav-link" href="https://github.com/abhichandra21/magpie" target="_blank" rel="noopener">GitHub</a>
+    </div>
+  </nav>
+
+  <main class="library-main">
+    <header class="library-head">
+      <h1>Library</h1>
+      <p class="sub">Browse photos in configured libraries. Click any photo to read its caption and tags.</p>
+    </header>
+
+    <div class="library-toolbar">
+      <div class="lib-chips" id="lib-chips"></div>
+      <div class="lib-filter">
+        <button type="button" class="fbtn active" data-filter="all">All</button>
+        <button type="button" class="fbtn" data-filter="tagged">Tagged</button>
+        <button type="button" class="fbtn" data-filter="untagged">Untagged</button>
+      </div>
+    </div>
+
+    <div class="library-meta" id="library-meta">no library selected</div>
+
+    <div class="pswp-gallery gallery" id="gallery"></div>
+
+    <div class="load-more" id="load-more" hidden>
+      <button type="button" class="btn-ghost" id="load-more-btn">Load more</button>
+    </div>
+
+    <div id="empty-hint" class="empty" hidden>
+      No libraries configured yet.
+      <small>add a [libraries] section to your config</small>
+    </div>
+  </main>
+
+  <footer>
+    <span class="mono">Pica pica · local-only</span>
+    <span class="sep">·</span>
+    <a href="/" class="mono" style="color:var(--muted); text-decoration:none;">back to tag</a>
+  </footer>
+
+  <script type="module" src="/static/library.js"></script>
+</body>
+</html>

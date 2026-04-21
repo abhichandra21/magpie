@@ -1,0 +1,169 @@
+/* magpie library — gallery + PhotoSwipe overrides */
+
+.library-main {
+  max-width: 80rem;
+  margin: 0 auto;
+  padding: 2.2rem 2rem 5rem;
+}
+.library-head h1 { font-size: clamp(2rem, 4vw, 2.8rem); margin-bottom: 0.2rem; }
+.library-head .sub { color: var(--muted); font-size: 0.92rem; margin-bottom: 1.6rem; }
+
+.library-toolbar {
+  display: flex; gap: 1rem;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+.lib-chips { display: flex; gap: 0.4rem; flex-wrap: wrap; flex: 1; }
+.lib-chip {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--body);
+  padding: 0.45rem 0.9rem;
+  border-radius: 999px;
+  font-family: var(--mono);
+  font-size: 0.74rem;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+  display: inline-flex; align-items: center; gap: 0.5rem;
+}
+.lib-chip:hover { border-color: var(--accent); color: var(--text); }
+.lib-chip.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.lib-chip.missing {
+  color: var(--muted); border-style: dashed;
+  cursor: not-allowed;
+}
+.lib-chip .count {
+  font-size: 0.62rem;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+}
+.lib-chip.active .count { color: rgba(255,255,255,0.85); }
+
+.lib-filter {
+  display: flex; gap: 0.2rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 3px;
+  background: var(--surface);
+}
+.fbtn {
+  background: transparent;
+  border: none;
+  padding: 0.35rem 0.85rem;
+  border-radius: 999px;
+  font-family: var(--mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.fbtn:hover { color: var(--text); }
+.fbtn.active { background: var(--surface2); color: var(--text); }
+
+.library-meta {
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  margin-bottom: 1.2rem;
+}
+
+.gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 1rem;
+}
+.gallery a {
+  position: relative;
+  display: block;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+  text-decoration: none;
+  transition: transform 0.15s, border-color 0.15s;
+}
+.gallery a:hover { transform: translateY(-2px); border-color: var(--accent); text-decoration: none; }
+.gallery img {
+  display: block; width: 100%; height: 200px; object-fit: cover;
+  background: var(--surface2);
+}
+.gallery .badge {
+  position: absolute; top: 8px; right: 8px;
+  font-family: var(--mono);
+  font-size: 0.58rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  background: rgba(15,12,20,0.78);
+  color: var(--text);
+  padding: 3px 7px;
+  border-radius: 3px;
+  border: 1px solid rgba(255,255,255,0.06);
+  backdrop-filter: blur(4px);
+}
+.gallery .badge.tagged { color: var(--good); border-color: rgba(47,191,155,0.35); }
+.gallery .badge.untagged { color: var(--muted); }
+
+.gallery .tile-cap {
+  padding: 0.5rem 0.7rem 0.7rem;
+  font-family: var(--sans);
+  font-style: italic;
+  font-size: 0.78rem;
+  color: var(--body);
+  line-height: 1.35;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  min-height: 2.6em;
+}
+
+.load-more { text-align: center; margin: 2rem 0 1rem; }
+
+/* PhotoSwipe caption overlay */
+.pswp__caption {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  padding: 1rem 1.4rem 1.2rem;
+  color: var(--text);
+  background: linear-gradient(180deg, transparent, rgba(15,12,20,0.94));
+}
+.pswp__caption .pcap {
+  font-family: var(--sans);
+  font-style: italic;
+  font-size: 1.05rem;
+  line-height: 1.4;
+  margin-bottom: 0.5rem;
+}
+.pswp__caption .pkw {
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  color: var(--body);
+  letter-spacing: 0.04em;
+  display: flex; flex-wrap: wrap; gap: 0.3rem 0.5rem;
+}
+.pswp__caption .pkw span + span::before {
+  content: " · "; color: var(--muted); margin-right: 0.4rem;
+}
+.pswp__caption .pmeta {
+  font-family: var(--mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-top: 0.5rem;
+}
+
+@media (max-width: 720px) {
+  .library-main { padding: 1.4rem 1rem 3rem; }
+  .gallery { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 0.6rem; }
+  .gallery img { height: 150px; }
+}

@@ -283,6 +283,121 @@ def test_settings_html_served(client):
     assert "Settings" in r.text
 
 
+def test_library_and_logs_pages_served(client):
+    assert client.get("/library").status_code == 200
+    assert "Library" in client.get("/library").text
+    assert client.get("/logs").status_code == 200
+    assert "Logs" in client.get("/logs").text
+
+
+def test_logs_tail_returns_lines(client):
+    # any prior request emits at least one uvicorn log line
+    client.get("/api/stats")
+    body = client.get("/api/logs?limit=20").json()
+    assert "lines" in body
+    assert isinstance(body["lines"], list)
+
+
+def test_libraries_endpoint_lists_configured(tmp_path, monkeypatch, runs_dir):
+    cfg = tmp_path / "config.toml"
+    photos = tmp_path / "photos"
+    photos.mkdir()
+    shutil.copyfile(FIXTURES / "untagged.jpg", photos / "a.jpg")
+    shutil.copyfile(FIXTURES / "already_tagged.jpg", photos / "b.jpg")
+    cfg.write_text(
+        f"""
+default_endpoint = "mac"
+max_keywords = 25
+concurrency = 2
+
+[endpoints.mac]
+url = "http://x/v1"
+model = "m"
+api_key = ""
+
+[libraries]
+shots = "{photos}"
+
+[prompt]
+system = "s"
+user_template = "u {{hint}}"
+"""
+    )
+    monkeypatch.setattr("magpie.webui.server.DEFAULT_CONFIG_PATH", cfg)
+    monkeypatch.setattr("magpie.config.DEFAULT_CONFIG_PATH", cfg)
+    fresh = TestClient(build_app(runs_dir=runs_dir))
+    body = fresh.get("/api/libraries").json()
+    libs = {lib["name"]: lib for lib in body["libraries"]}
+    assert "shots" in libs
+    assert libs["shots"]["count"] == 2
+
+    detail = fresh.get("/api/library/shots").json()
+    assert detail["meta"]["total"] == 2
+    items_by_name = {it["name"]: it for it in detail["items"]}
+    assert items_by_name["b.jpg"]["tagged"] is True
+    assert items_by_name["a.jpg"]["tagged"] is False
+
+
+def test_library_filter_tagged(tmp_path, monkeypatch, runs_dir):
+    cfg = tmp_path / "config.toml"
+    photos = tmp_path / "photos"
+    photos.mkdir()
+    shutil.copyfile(FIXTURES / "untagged.jpg", photos / "u.jpg")
+    shutil.copyfile(FIXTURES / "already_tagged.jpg", photos / "t.jpg")
+    cfg.write_text(
+        f"""
+default_endpoint = "mac"
+max_keywords = 25
+concurrency = 2
+[endpoints.mac]
+url = "http://x/v1"
+model = "m"
+api_key = ""
+[libraries]
+shots = "{photos}"
+[prompt]
+system = "s"
+user_template = "u {{hint}}"
+"""
+    )
+    monkeypatch.setattr("magpie.webui.server.DEFAULT_CONFIG_PATH", cfg)
+    monkeypatch.setattr("magpie.config.DEFAULT_CONFIG_PATH", cfg)
+    fresh = TestClient(build_app(runs_dir=runs_dir))
+    only_tagged = fresh.get("/api/library/shots?filter=tagged").json()
+    assert [i["name"] for i in only_tagged["items"]] == ["t.jpg"]
+    only_untagged = fresh.get("/api/library/shots?filter=untagged").json()
+    assert [i["name"] for i in only_untagged["items"]] == ["u.jpg"]
+
+
+def test_thumb_serves_library_path(tmp_path, monkeypatch, runs_dir):
+    cfg = tmp_path / "config.toml"
+    photos = tmp_path / "photos"
+    photos.mkdir()
+    shutil.copyfile(FIXTURES / "untagged.jpg", photos / "x.jpg")
+    cfg.write_text(
+        f"""
+default_endpoint = "mac"
+max_keywords = 25
+concurrency = 2
+[endpoints.mac]
+url = "http://x/v1"
+model = "m"
+api_key = ""
+[libraries]
+shots = "{photos}"
+[prompt]
+system = "s"
+user_template = "u {{hint}}"
+"""
+    )
+    monkeypatch.setattr("magpie.webui.server.DEFAULT_CONFIG_PATH", cfg)
+    monkeypatch.setattr("magpie.config.DEFAULT_CONFIG_PATH", cfg)
+    fresh = TestClient(build_app(runs_dir=runs_dir))
+    r = fresh.get("/api/thumb", params={"path": str(photos / "x.jpg")})
+    assert r.status_code == 200
+    assert r.headers["content-type"] == "image/jpeg"
+
+
 def test_thumb_404_when_file_missing(runs_dir, client, tmp_path):
     # CSV references a path that doesn't exist on disk
     ghost = tmp_path / "ghost.jpg"

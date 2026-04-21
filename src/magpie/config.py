@@ -27,6 +27,12 @@ url = "http://192.168.1.75:11434/v1"
 model = "qwen2.5vl:72b"
 api_key = ""
 
+[libraries]
+# Add named photo libraries to browse from the web UI. Paths may use ~.
+# Example:
+#   pictures = "~/Pictures"
+#   lightroom = "~/NextCloud/Lightroom Publish"
+
 [prompt]
 system = "You are an expert photo cataloger. You reply with strict JSON only \u2014 no prose, no markdown fences."
 user_template = \"\"\"Analyze this photograph. Return a JSON object with exactly these keys:
@@ -59,6 +65,7 @@ class _ConfigModel(BaseModel):
     concurrency: int = Field(default=2, gt=0)
     endpoints: dict[str, _EndpointModel]
     prompt: _PromptModel
+    libraries: dict[str, str] = Field(default_factory=dict)
 
 
 class Config:
@@ -69,12 +76,14 @@ class Config:
         concurrency: int,
         endpoints: dict[str, EndpointConfig],
         prompt: PromptConfig,
+        libraries: dict[str, Path] | None = None,
     ) -> None:
         self.default_endpoint = default_endpoint
         self.max_keywords = max_keywords
         self.concurrency = concurrency
         self.endpoints = endpoints
         self.prompt = prompt
+        self.libraries = libraries or {}
 
     def endpoint(self, name: str | None = None) -> EndpointConfig:
         key = name or os.environ.get("MAGPIE_ENDPOINT") or self.default_endpoint
@@ -111,4 +120,8 @@ class Config:
                 system=model.prompt.system,
                 user_template=model.prompt.user_template,
             ),
+            libraries={
+                name: Path(raw).expanduser()
+                for name, raw in model.libraries.items()
+            },
         )

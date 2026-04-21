@@ -7,23 +7,29 @@ endpoint cannot be abused to read arbitrary files.
 
 from __future__ import annotations
 
+import asyncio
 import csv
 import io
+import json
 import os
 import socket
+import time
 import tomllib
 from datetime import datetime
 from pathlib import Path
 
 import exiftool
 from fastapi import Body, FastAPI, HTTPException, Query
-from fastapi.responses import FileResponse, JSONResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from PIL import Image, ImageOps
 
 from magpie.config import DEFAULT_CONFIG_PATH, Config, ConfigError
 from magpie.runner import IMAGE_EXTS
+from magpie.webui import logstream
 from magpie.webui.jobs import MANAGER
+
+logstream.install()
 
 BROWSE_ROOT = Path(os.environ.get("MAGPIE_BROWSE_ROOT") or Path.home()).resolve()
 
@@ -72,18 +78,18 @@ def _run_meta(path: Path) -> dict:
     }
 
 
-def _read_tags(paths: list[str]) -> dict[str, dict]:
-    """Pull IPTC keywords from files via exiftool. Skips missing files."""
+def _read_tags(paths: list[str], with_dims: bool = False) -> dict[str, dict]:
+    """Pull IPTC keywords (and optionally pixel dims) via exiftool. Skips missing files."""
     existing = [p for p in paths if p and Path(p).exists()]
     out: dict[str, dict] = {}
     if not existing:
         return out
+    tags = ["IPTC:Keywords", "IPTC:Caption-Abstract"]
+    if with_dims:
+        tags += ["File:ImageWidth", "File:ImageHeight", "EXIF:Orientation"]
     try:
         with exiftool.ExifToolHelper() as et:
-            metas = et.get_tags(
-                existing,
-                tags=["IPTC:Keywords", "IPTC:Caption-Abstract"],
-            )
+            metas = et.get_tags(existing, tags=tags)
     except Exception:
         return out
     for m in metas:
@@ -91,10 +97,24 @@ def _read_tags(paths: list[str]) -> dict[str, dict]:
         raw_kw = m.get("IPTC:Keywords") or []
         if isinstance(raw_kw, str):
             raw_kw = [raw_kw]
-        out[src] = {
+        entry = {
             "keywords": [str(k) for k in raw_kw],
             "caption": m.get("IPTC:Caption-Abstract") or "",
         }
+        if with_dims:
+            w = m.get("File:ImageWidth") or 0
+            h = m.get("File:ImageHeight") or 0
+            orient = m.get("EXIF:Orientation") or 1
+            try:
+                w = int(w); h = int(h); orient = int(orient)
+            except (TypeError, ValueError):
+                w = h = 0; orient = 1
+            # orientations 5-8 swap w/h
+            if orient in (5, 6, 7, 8):
+                w, h = h, w
+            entry["width"] = w
+            entry["height"] = h
+        out[src] = entry
     return out
 
 
@@ -142,6 +162,12 @@ def _job_to_dict(job) -> dict:
 def build_app(runs_dir: Path | None = None) -> FastAPI:
     runs_dir = runs_dir or _runs_dir()
     app = FastAPI(title="magpie webui", openapi_url=None, docs_url=None, redoc_url=None)
+
+    @app.on_event("startup")
+    def _attach_log_handler() -> None:
+        # Re-install after uvicorn has finished configuring its own loggers.
+        logstream.install()
+        logstream.RING.push("INFO", "magpie webui ready", logger="magpie.webui")
 
     @app.get("/api/endpoints")
     def endpoints() -> JSONResponse:
@@ -236,29 +262,179 @@ def build_app(runs_dir: Path | None = None) -> FastAPI:
             row["keywords"] = meta_tags.get("keywords") or []
         return JSONResponse({"meta": meta, "rows": rows})
 
+    def _library_roots() -> dict[str, Path]:
+        try:
+            cfg = Config.load()
+        except ConfigError:
+            return {}
+        return {name: p.resolve() for name, p in cfg.libraries.items()}
+
+    def _path_allowed(path: str) -> bool:
+        if path in _all_known_paths(runs_dir):
+            return True
+        try:
+            resolved = Path(path).resolve()
+        except OSError:
+            return False
+        return any(_under_root(resolved, root) for root in _library_roots().values())
+
+    def _render_image(src: Path, max_edge: int, quality: int) -> bytes:
+        with Image.open(src) as img:
+            img = ImageOps.exif_transpose(img)
+            if img.mode not in ("RGB", "L"):
+                img = img.convert("RGB")
+            img.thumbnail((max_edge, max_edge), Image.LANCZOS)
+            buf = io.BytesIO()
+            img.save(buf, format="JPEG", quality=quality, optimize=True)
+        return buf.getvalue()
+
     @app.get("/api/thumb")
     def thumbnail(path: str = Query(...)) -> Response:
-        allowed = _all_known_paths(runs_dir)
-        if path not in allowed:
-            raise HTTPException(status_code=403, detail="path not in any run log")
+        if not _path_allowed(path):
+            raise HTTPException(status_code=403, detail="path not allowed")
         src = Path(path)
         if not src.exists():
             raise HTTPException(status_code=404, detail="file missing on disk")
         try:
-            with Image.open(src) as img:
-                img = ImageOps.exif_transpose(img)
-                if img.mode not in ("RGB", "L"):
-                    img = img.convert("RGB")
-                img.thumbnail((THUMB_MAX_EDGE, THUMB_MAX_EDGE), Image.LANCZOS)
-                buf = io.BytesIO()
-                img.save(buf, format="JPEG", quality=82, optimize=True)
+            body = _render_image(src, THUMB_MAX_EDGE, 82)
         except Exception as exc:  # noqa: BLE001
             raise HTTPException(status_code=500, detail=f"decode: {exc}") from exc
         return Response(
-            content=buf.getvalue(),
+            content=body,
             media_type="image/jpeg",
             headers={"Cache-Control": "public, max-age=3600"},
         )
+
+    @app.get("/api/image")
+    def full_image(path: str = Query(...)) -> Response:
+        if not _path_allowed(path):
+            raise HTTPException(status_code=403, detail="path not allowed")
+        src = Path(path)
+        if not src.exists():
+            raise HTTPException(status_code=404, detail="file missing on disk")
+        try:
+            body = _render_image(src, 2048, 88)
+        except Exception as exc:  # noqa: BLE001
+            raise HTTPException(status_code=500, detail=f"decode: {exc}") from exc
+        return Response(
+            content=body,
+            media_type="image/jpeg",
+            headers={"Cache-Control": "public, max-age=3600"},
+        )
+
+    @app.get("/api/libraries")
+    def libraries() -> JSONResponse:
+        roots = _library_roots()
+        out: list[dict] = []
+        for name, root in roots.items():
+            exists = root.exists() and root.is_dir()
+            count = 0
+            if exists:
+                try:
+                    count = sum(
+                        1 for c in root.rglob("*")
+                        if c.is_file() and c.suffix.lower() in IMAGE_EXTS
+                    )
+                except OSError:
+                    count = 0
+            out.append(
+                {"name": name, "path": str(root), "exists": exists, "count": count}
+            )
+        return JSONResponse({"libraries": out})
+
+    @app.get("/api/library/{name}")
+    def library_list(
+        name: str,
+        offset: int = Query(default=0, ge=0),
+        limit: int = Query(default=60, ge=1, le=300),
+        filter: str = Query(default="all", pattern="^(all|tagged|untagged)$"),
+    ) -> JSONResponse:
+        roots = _library_roots()
+        if name not in roots:
+            raise HTTPException(status_code=404, detail="library not found")
+        root = roots[name]
+        if not root.exists() or not root.is_dir():
+            raise HTTPException(status_code=410, detail="library path missing on disk")
+
+        all_files = [
+            p
+            for p in sorted(root.rglob("*"))
+            if p.is_file() and p.suffix.lower() in IMAGE_EXTS
+        ]
+        total = len(all_files)
+        # shallow filtering by name/extension only; the heavy IPTC read happens
+        # after slicing so we don't parse every file in a 10k library per request.
+        page = all_files[offset : offset + limit]
+        tags_by_path = _read_tags([str(p) for p in page], with_dims=True)
+
+        items: list[dict] = []
+        for p in page:
+            meta = tags_by_path.get(str(p), {})
+            caption = meta.get("caption") or ""
+            keywords = meta.get("keywords") or []
+            tagged = bool(caption or keywords)
+            if filter == "tagged" and not tagged:
+                continue
+            if filter == "untagged" and tagged:
+                continue
+            try:
+                st = p.stat()
+                size = st.st_size
+                mtime = st.st_mtime
+            except OSError:
+                size = 0
+                mtime = 0
+            rel = str(p.relative_to(root))
+            items.append(
+                {
+                    "path": str(p),
+                    "rel": rel,
+                    "name": p.name,
+                    "caption": caption,
+                    "keywords": keywords,
+                    "tagged": tagged,
+                    "size": size,
+                    "mtime": mtime,
+                    "width": meta.get("width") or 0,
+                    "height": meta.get("height") or 0,
+                }
+            )
+        return JSONResponse(
+            {
+                "meta": {"name": name, "root": str(root), "total": total,
+                         "offset": offset, "limit": limit, "filter": filter},
+                "items": items,
+            }
+        )
+
+    @app.get("/api/logs")
+    def logs_tail(limit: int = Query(default=300, ge=1, le=2000)) -> JSONResponse:
+        lines = [logstream.line_to_dict(ln) for ln in logstream.RING.tail(limit)]
+        return JSONResponse({"lines": lines, "counter": logstream.RING._counter})
+
+    @app.get("/api/logs/stream")
+    async def logs_stream() -> StreamingResponse:
+        last = logstream.RING._counter
+
+        async def gen():
+            nonlocal last
+            # initial flush
+            snapshot = logstream.RING.tail(200)
+            yield "event: bootstrap\ndata: " + json.dumps(
+                [logstream.line_to_dict(ln) for ln in snapshot]
+            ) + "\n\n"
+            while True:
+                new, last = await asyncio.to_thread(
+                    logstream.RING.wait_for_new, last, 10.0
+                )
+                if new:
+                    for ln in new:
+                        yield "data: " + json.dumps(logstream.line_to_dict(ln)) + "\n\n"
+                else:
+                    # keepalive
+                    yield f": heartbeat {time.time():.0f}\n\n"
+
+        return StreamingResponse(gen(), media_type="text/event-stream")
 
     @app.post("/api/validate")
     def validate(payload: dict = Body(default_factory=dict)) -> JSONResponse:  # noqa: B008
@@ -388,6 +564,14 @@ def build_app(runs_dir: Path | None = None) -> FastAPI:
     def settings_page() -> FileResponse:
         return _static_page("settings.html")
 
+    @app.get("/library")
+    def library_page() -> FileResponse:
+        return _static_page("library.html")
+
+    @app.get("/logs")
+    def logs_page() -> FileResponse:
+        return _static_page("logs.html")
+
     return app
 
 
@@ -454,6 +638,7 @@ def _write_config(payload: dict) -> None:
 
     path = DEFAULT_CONFIG_PATH
     existing_prompt = _read_prompt_block(path)
+    existing_libraries = _read_libraries_block(path)
     lines: list[str] = [
         f'default_endpoint = "{default_endpoint}"',
         f"max_keywords = {max_keywords}",
@@ -465,6 +650,9 @@ def _write_config(payload: dict) -> None:
         lines.append(f'url = "{_toml_escape(ep["url"])}"')
         lines.append(f'model = "{_toml_escape(ep["model"])}"')
         lines.append(f'api_key = "{_toml_escape(ep["api_key"])}"')
+        lines.append("")
+    if existing_libraries:
+        lines.append(existing_libraries)
         lines.append("")
     lines.append(existing_prompt)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -483,6 +671,28 @@ def _read_existing_api_keys(path: Path) -> dict[str, str]:
         if isinstance(ep, dict) and isinstance(ep.get("api_key"), str):
             out[name] = ep["api_key"]
     return out
+
+
+def _read_libraries_block(path: Path) -> str:
+    """Return the `[libraries]` section verbatim, or empty string."""
+    if not path.exists():
+        return ""
+    text = path.read_text()
+    lines = text.splitlines()
+    start = None
+    for i, line in enumerate(lines):
+        if line.strip() == "[libraries]":
+            start = i
+            break
+    if start is None:
+        return ""
+    end = len(lines)
+    for j in range(start + 1, len(lines)):
+        stripped = lines[j].strip()
+        if stripped.startswith("[") and not stripped.startswith("[libraries"):
+            end = j
+            break
+    return "\n".join(lines[start:end]).rstrip()
 
 
 def _read_prompt_block(path: Path) -> str:
