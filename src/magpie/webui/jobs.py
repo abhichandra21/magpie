@@ -143,14 +143,23 @@ class JobManager:
             def __init__(self, tagger: Tagger, job: Job) -> None:
                 self._tagger = tagger
                 self._job = job
-                self._current: str | None = None
-
-            def expect(self, path: Path) -> None:
-                self._current = str(path)
-                self._job.current = self._current
 
             async def tag(self, image_bytes: bytes, hint: str = "") -> TagResult:
-                return await self._tagger.tag(image_bytes, hint=hint)
+                try:
+                    return await self._tagger.tag(image_bytes, hint=hint)
+                except Exception as exc:
+                    self._job.failed += 1
+                    self._job.events.append(
+                        JobEvent(
+                            "file",
+                            {
+                                "path": self._job.current or "",
+                                "status": "failed",
+                                "error": f"{type(exc).__name__}: {exc}",
+                            },
+                        )
+                    )
+                    raise
 
         adapted = _TaggerAdapter(tagger, job)
 
@@ -158,14 +167,37 @@ class JobManager:
             def __init__(self, inner: MetadataWriter, job: Job) -> None:
                 self._inner = inner
                 self._job = job
-                self._last: Path | None = None
 
             def already_tagged(self, path: Path) -> bool:
                 self._job.current = str(path)
-                return self._inner.already_tagged(path)
+                is_tagged = self._inner.already_tagged(path)
+                if is_tagged:
+                    self._job.skipped += 1
+                    self._job.events.append(
+                        JobEvent(
+                            "file",
+                            {"path": str(path), "status": "skipped"},
+                        )
+                    )
+                return is_tagged
 
             def write(self, path: Path, result: TagResult, model_id: str) -> None:
-                self._inner.write(path, result, model_id)
+                try:
+                    self._inner.write(path, result, model_id)
+                except Exception as exc:
+                    self._job.failed += 1
+                    self._job.events.append(
+                        JobEvent(
+                            "file",
+                            {
+                                "path": str(path),
+                                "status": "failed",
+                                "error": f"{type(exc).__name__}: {exc}",
+                            },
+                        )
+                    )
+                    raise
+                self._job.tagged += 1
                 self._job.events.append(
                     JobEvent(
                         "file",
