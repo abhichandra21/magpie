@@ -861,6 +861,71 @@ footer .sep { color: var(--border); }
 .logs-levels .fbtn[data-level="ERROR"].active  { color: var(--bad); }
 
 /* ============================================================
+   Toggle switch (replaces ugly native checkboxes in toolbars)
+   ============================================================ */
+.switch {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  cursor: pointer;
+  user-select: none;
+  font-family: var(--mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.switch input {
+  position: absolute;
+  opacity: 0;
+  width: 0; height: 0;
+}
+.switch .track {
+  position: relative;
+  width: 34px;
+  height: 18px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  transition: background 0.2s, border-color 0.2s, box-shadow 0.2s;
+  flex-shrink: 0;
+}
+.switch .thumb {
+  position: absolute;
+  left: 2px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--muted);
+  transition: left 0.2s ease, background 0.2s ease;
+}
+.switch input:checked + .track {
+  background: rgba(47,191,155,0.15);
+  border-color: rgba(47,191,155,0.5);
+  box-shadow: inset 0 0 0 1px rgba(47,191,155,0.15);
+}
+.switch input:checked + .track .thumb {
+  left: 18px;
+  background: var(--good);
+}
+.switch input:focus-visible + .track {
+  box-shadow: 0 0 0 3px rgba(72,201,214,0.25);
+}
+.switch:hover .thumb { background: var(--text); }
+.switch input:checked:hover + .track .thumb { background: var(--good); }
+.switch:has(input:checked) .switch-label { color: var(--text); }
+
+/* inline (non-right-aligned) variant for forms */
+.switch.switch-inline {
+  margin-left: 0;
+  align-self: end;
+  padding-bottom: 0.2rem;
+}
+
+/* ============================================================
    Logs page — better message column, hover line, copy
    ============================================================ */
 .logs-pane {

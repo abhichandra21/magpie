@@ -52,9 +52,10 @@
         <button class="fbtn" type="button" data-level="ERROR">Error</button>
       </div>
       <input type="search" id="search" class="input-field logs-search" placeholder="filter…  e.g. uvicorn or tagged" spellcheck="false">
-      <label class="opts toggle" style="margin-left:auto;">
+      <label class="switch" for="autoscroll" title="auto-scroll">
         <input type="checkbox" id="autoscroll" checked>
-        <span>auto-scroll</span>
+        <span class="track" aria-hidden="true"><span class="thumb"></span></span>
+        <span class="switch-label">auto-scroll</span>
       </label>
       <button class="btn-ghost" type="button" id="clear">Clear view</button>
     </div>

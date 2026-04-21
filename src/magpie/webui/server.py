@@ -12,6 +12,7 @@ import csv
 import io
 import json
 import os
+import re
 import socket
 import time
 import tomllib
@@ -662,7 +663,9 @@ def _write_config(payload: dict) -> None:
             lpath = str(lib.get("path") or "").strip()
             if not lname:
                 continue  # silently drop empty rows
-            if not lname.isidentifier():
+            # Allow any name except ones that would break TOML parsing:
+            # no newlines, no bare quotes, can't be empty after trim.
+            if any(c in lname for c in ("\n", "\r", '"', "\\")):
                 raise ValueError(f"invalid library name: {lname!r}")
             if lname in seen:
                 raise ValueError(f"duplicate library name: {lname}")
@@ -689,7 +692,8 @@ def _write_config(payload: dict) -> None:
         if cleaned_libs:
             lines.append("[libraries]")
             for lname, lpath in cleaned_libs:
-                lines.append(f'{lname} = "{_toml_escape(lpath)}"')
+                key = _toml_bare_or_quoted(lname)
+                lines.append(f'{key} = "{_toml_escape(lpath)}"')
             lines.append("")
     else:
         existing_libraries = _read_libraries_block(path)
@@ -747,9 +751,28 @@ def _read_prompt_block(path: Path) -> str:
             text = ""
         if text:
             lines = text.splitlines()
-            for idx, line in enumerate(lines):
+            start = None
+            for i, line in enumerate(lines):
                 if line.strip() == "[prompt]":
-                    return "\n".join(lines[idx:])
+                    start = i
+                    break
+            if start is not None:
+                end = len(lines)
+                in_triple = False
+                for j in range(start + 1, len(lines)):
+                    stripped = lines[j].strip()
+                    # honour triple-quoted strings so a """ that contains a
+                    # bracket on its own line doesn't terminate the block early.
+                    if '"""' in lines[j] or "'''" in lines[j]:
+                        count = lines[j].count('"""') + lines[j].count("'''")
+                        if count % 2 == 1:
+                            in_triple = not in_triple
+                    if in_triple:
+                        continue
+                    if stripped.startswith("[") and not stripped.startswith("[prompt"):
+                        end = j
+                        break
+                return "\n".join(lines[start:end]).rstrip()
     # fallback to the default
     from magpie.config import DEFAULT_CONFIG_TOML
 
@@ -759,6 +782,16 @@ def _read_prompt_block(path: Path) -> str:
 
 def _toml_escape(s: str) -> str:
     return s.replace("\\", "\\\\").replace('"', '\\"')
+
+
+_BARE_KEY_RE = re.compile(r"^[A-Za-z0-9_-]+$")
+
+
+def _toml_bare_or_quoted(key: str) -> str:
+    """Return ``key`` as a bare TOML key if it matches [A-Za-z0-9_-]+, else as a quoted key."""
+    if _BARE_KEY_RE.match(key):
+        return key
+    return '"' + _toml_escape(key) + '"'
 
 
 def _pick_port(requested: int) -> int:

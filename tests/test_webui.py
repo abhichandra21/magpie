@@ -258,6 +258,60 @@ def test_config_get_and_put_round_trip(tmp_path, monkeypatch, runs_dir):
     assert "expert photo cataloger" in text
 
 
+def test_config_put_accepts_non_identifier_library_names(tmp_path, monkeypatch, runs_dir):
+    cfg_path = tmp_path / "config.toml"
+    monkeypatch.setattr("magpie.webui.server.DEFAULT_CONFIG_PATH", cfg_path)
+    monkeypatch.setattr("magpie.config.DEFAULT_CONFIG_PATH", cfg_path)
+    fresh = TestClient(build_app(runs_dir=runs_dir))
+    body = {
+        "default_endpoint": "mac",
+        "max_keywords": 25, "concurrency": 2,
+        "endpoints": [{"name": "mac", "url": "http://x/v1", "model": "m"}],
+        "libraries": [
+            {"name": "family trip", "path": "/tmp"},
+            {"name": "Chicago-Air-Show", "path": "/tmp"},
+        ],
+    }
+    r = fresh.put("/api/config", json=body)
+    assert r.status_code == 200, r.text
+    text = cfg_path.read_text()
+    assert '"family trip"' in text     # quoted (has space)
+    assert "Chicago-Air-Show = " in text  # bare key (hyphens are TOML-legal)
+
+
+def test_config_put_saves_libraries_then_endpoints_preserves_prompt(tmp_path, monkeypatch, runs_dir):
+    cfg_path = tmp_path / "config.toml"
+    monkeypatch.setattr("magpie.webui.server.DEFAULT_CONFIG_PATH", cfg_path)
+    monkeypatch.setattr("magpie.config.DEFAULT_CONFIG_PATH", cfg_path)
+    fresh = TestClient(build_app(runs_dir=runs_dir))
+    # 1) first save introduces libraries
+    fresh.put(
+        "/api/config",
+        json={
+            "default_endpoint": "mac",
+            "max_keywords": 25, "concurrency": 2,
+            "endpoints": [{"name": "mac", "url": "http://x/v1", "model": "m"}],
+            "libraries": [{"name": "pics", "path": "/tmp"}],
+        },
+    )
+    # 2) second save omits libraries; should preserve the existing block
+    #    without swallowing it into the prompt tail.
+    fresh.put(
+        "/api/config",
+        json={
+            "default_endpoint": "mac",
+            "max_keywords": 30, "concurrency": 2,
+            "endpoints": [{"name": "mac", "url": "http://x/v1", "model": "m2"}],
+        },
+    )
+    text = cfg_path.read_text()
+    # exactly one [libraries] block survives
+    assert text.count("[libraries]") == 1
+    assert text.count("[prompt]") == 1
+    # max_keywords updated
+    assert "max_keywords = 30" in text
+
+
 def test_config_put_rejects_invalid(tmp_path, monkeypatch, runs_dir):
     cfg_path = tmp_path / "config.toml"
     monkeypatch.setattr("magpie.webui.server.DEFAULT_CONFIG_PATH", cfg_path)
